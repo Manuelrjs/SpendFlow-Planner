@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
-  const appManifest = {
+  return {
     name: 'SpendFlow Planner',
     short_name: 'SpendFlow',
     description: 'Gastos, cuotas y compromisos futuros',
@@ -21,23 +21,5 @@ export default function manifest(): MetadataRoute.Manifest {
         type: 'image/png',
       },
     ],
-    share_target: {
-      action: '/compartir',
-      method: 'POST',
-      enctype: 'multipart/form-data',
-      params: {
-        title: 'title',
-        text: 'text',
-        url: 'url',
-        files: [
-          {
-            name: 'files',
-            accept: ['image/*', 'application/pdf'],
-          },
-        ],
-      },
-    },
   };
-
-  return appManifest as unknown as MetadataRoute.Manifest;
 }
