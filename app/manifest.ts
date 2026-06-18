@@ -1,24 +1,29 @@
 import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
-  return {
+  const appManifest = {
     name: 'SpendFlow Planner',
     short_name: 'SpendFlow',
     description: 'Gastos, cuotas y compromisos futuros',
     start_url: '/',
-    scope: '/',
     display: 'standalone',
-    orientation: 'portrait',
-    background_color: '#0F0F14',
-    theme_color: '#0F0F14',
+    background_color: '#0B0F14',
+    theme_color: '#0B0F14',
     icons: [
-      { src: '/icon', sizes: '192x192', type: 'image/png' },
-      { src: '/icon', sizes: '512x512', type: 'image/png' },
-      { src: '/apple-icon', sizes: '180x180', type: 'image/png' },
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png',
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+      },
     ],
     share_target: {
       action: '/compartir',
-      method: 'post',
+      method: 'POST',
       enctype: 'multipart/form-data',
       params: {
         title: 'title',
@@ -26,11 +31,13 @@ export default function manifest(): MetadataRoute.Manifest {
         url: 'url',
         files: [
           {
-            name: 'comprobante',
+            name: 'files',
             accept: ['image/*', 'application/pdf'],
           },
         ],
       },
-    } as unknown as MetadataRoute.Manifest['share_target'],
+    },
   };
+
+  return appManifest as unknown as MetadataRoute.Manifest;
 }
