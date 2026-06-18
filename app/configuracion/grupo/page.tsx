@@ -29,8 +29,11 @@ function crearFechaExpiracion() {
 }
 
 function crearLink(token: string) {
-  if (typeof window === 'undefined') return `/aceptar-invitacion?token=${token}`;
-  return `${window.location.origin}/aceptar-invitacion?token=${token}`;
+  const ruta = `/aceptar-invitacion?token=${encodeURIComponent(token)}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, '');
+  if (appUrl) return `${appUrl}${ruta}`;
+  if (typeof window !== 'undefined') return `${window.location.origin}${ruta}`;
+  return ruta;
 }
 
 function etiquetaRol(rol: string) {

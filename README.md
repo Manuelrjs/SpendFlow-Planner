@@ -471,3 +471,62 @@ SpendFlow Planner usa **Moderno oscuro** (`dark-modern`) como tema predeterminad
 La preferencia se guarda únicamente en `localStorage` con la clave `spendflow-theme`; no requiere tablas, migraciones ni cambios en Supabase. Al iniciar, el layout aplica el tema guardado sobre `data-theme` en el elemento `html` antes de mostrar la interfaz para reducir el parpadeo.
 
 Para probar la experiencia PWA en iPhone, abrir la aplicación en Safari, alternar el tema, agregarla a la pantalla de inicio y volver a abrirla. Verificar que se conserve la apariencia elegida, que la barra inferior permita acceder a Inicio, Nuevo, Gastos, Flujo y Más; y que Más abra todas las opciones secundarias y que ningún contenido quede debajo del área segura inferior.
+
+## Deploy en Vercel
+
+### Variables de entorno requeridas
+
+Configurar estas variables en **Vercel → Project Settings → Environment Variables** y también en `.env.local` para desarrollo:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+OPENAI_API_KEY=
+NEXT_PUBLIC_APP_URL=
+NEXT_PUBLIC_APP_NAME=SpendFlow Planner
+```
+
+Notas de seguridad:
+
+- `OPENAI_API_KEY` es server-side y no debe exponerse como `NEXT_PUBLIC_*`.
+- No configurar ni publicar una service role key de Supabase en el frontend.
+- `NEXT_PUBLIC_APP_URL` debe apuntar a la URL pública real de Vercel. Para el dominio esperado puede ser:
+
+```bash
+NEXT_PUBLIC_APP_URL=https://spendflow-planner.vercel.app
+```
+
+Si Vercel asigna otro subdominio, usar ese subdominio real. Esta variable se usa para generar links públicos de invitación; si no está configurada, la app usa `window.location.origin` como fallback seguro en el navegador.
+
+### Pasos de despliegue
+
+1. Crear un proyecto en Vercel desde el repositorio de GitHub.
+2. Configurar las variables de entorno indicadas arriba.
+3. Ejecutar el deploy desde Vercel.
+4. Copiar la URL pública asignada por Vercel.
+5. Configurar Supabase Auth URL Configuration con esa URL.
+6. Probar login y registro.
+7. Probar creación y aceptación de invitaciones; el link debe usar `NEXT_PUBLIC_APP_URL` o el origen público del navegador, nunca `localhost`, Codespaces ni `app.github.dev` en producción.
+8. Probar la carga de un gasto con comprobante y verificar que el archivo se guarde en Supabase Storage y la metadata en la tabla `comprobantes`.
+9. Probar IA para imagen/PDF con `OPENAI_API_KEY` configurada.
+10. Probar la PWA en iPhone desde Safari usando **Agregar a pantalla de inicio**.
+
+### Supabase Auth URL Configuration
+
+En Supabase ir a **Authentication → URL Configuration**.
+
+Configurar **Site URL**:
+
+```text
+https://spendflow-planner.vercel.app
+```
+
+Configurar **Redirect URLs**:
+
+```text
+https://spendflow-planner.vercel.app/**
+http://localhost:3000/**
+https://*.app.github.dev/**
+```
+
+Aclaración: si Vercel asigna otra URL real al proyecto, reemplazar `https://spendflow-planner.vercel.app` por esa URL tanto en **Site URL** como en **Redirect URLs** y en `NEXT_PUBLIC_APP_URL`.

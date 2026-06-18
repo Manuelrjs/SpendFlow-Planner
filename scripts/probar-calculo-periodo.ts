@@ -1,4 +1,4 @@
-import { calcularPeriodoResumenYVencimiento } from '../utils/tarjetas.ts';
+import { calcularPeriodoResumenYVencimiento } from '../utils/tarjetas';
 
 interface CasoPrueba {
   descripcion: string;

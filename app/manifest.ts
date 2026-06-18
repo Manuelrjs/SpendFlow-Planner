@@ -18,7 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     share_target: {
       action: '/compartir',
-      method: 'POST',
+      method: 'post',
       enctype: 'multipart/form-data',
       params: {
         title: 'title',
@@ -31,6 +31,6 @@ export default function manifest(): MetadataRoute.Manifest {
           },
         ],
       },
-    },
+    } as unknown as MetadataRoute.Manifest['share_target'],
   };
 }
