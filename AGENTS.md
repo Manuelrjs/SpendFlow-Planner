@@ -23,6 +23,15 @@ Codex debe actuar como guía técnico por sprints:
 - Explicar qué cambió, cómo se probó y cuál es el siguiente paso sugerido.
 - Actualizar `SPRINTS.md` o `ROADMAP.md` si la tarea lo requiere.
 
+## Flujo Git recomendado
+
+Para avanzar rápido sin perder control:
+
+- Cambios chicos, urgentes y acotados de build/config pueden ir directo a `main` si la validación pasa y no tocan áreas sensibles.
+- Funcionalidades nuevas, cambios grandes o cualquier ajuste en Supabase, RLS, Auth, datos sensibles, gastos, grupos, flujo, calendario, comprobantes o IA deben hacerse en una rama `codex/*` y abrir Pull Request hacia `main`.
+- Después del primer deploy estable, preferir rama y Pull Request para cada cambio importante, aunque trabaje una sola persona.
+- Antes de pushear a `main`, confirmar que no hay cambios no relacionados y que la validación esperada del sprint pasó.
+
 ## Áreas protegidas por defecto
 
 Codex no debe tocar las siguientes áreas salvo que la tarea lo pida explícitamente:
