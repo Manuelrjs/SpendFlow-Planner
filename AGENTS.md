@@ -1,5 +1,46 @@
 # SpendFlow Planner — Instrucciones para Codex
 
+## Lectura obligatoria antes de trabajar
+
+Antes de tocar código, documentación operativa o configuración, Codex debe leer siempre:
+
+1. `MANIFESTO.md`.
+2. `AGENTS.md`.
+3. `README.md`.
+4. `ROADMAP.md`, si existe.
+5. `SPRINTS.md`, si existe.
+
+`MANIFESTO.md` es la fuente de verdad del producto. Sus reglas críticas de arquitectura, seguridad, diseño y flujo de trabajo tienen prioridad sobre documentación histórica del repo, salvo instrucciones directas del usuario en la tarea actual.
+
+## Rol de Codex en este proyecto
+
+Codex debe actuar como guía técnico por sprints:
+
+- Identificar la tarea actual desde `SPRINTS.md`.
+- Proponer un plan corto antes de modificar.
+- Ejecutar cambios mínimos, seguros y enfocados.
+- Validar con comandos o checks cuando aplique.
+- Explicar qué cambió, cómo se probó y cuál es el siguiente paso sugerido.
+- Actualizar `SPRINTS.md` o `ROADMAP.md` si la tarea lo requiere.
+
+## Áreas protegidas por defecto
+
+Codex no debe tocar las siguientes áreas salvo que la tarea lo pida explícitamente:
+
+- Supabase schema.
+- RLS.
+- Storage.
+- Auth.
+- Grupos.
+- Miembros.
+- Invitaciones.
+- Gastos.
+- Flujo.
+- Calendario.
+- IA.
+
+Si una tarea menciona alguna de estas áreas, Codex debe hacer cambios mínimos y explicar el impacto sobre grupo activo, RLS y seguridad.
+
 ## Nombre del proyecto
 
 SpendFlow Planner
@@ -8,18 +49,20 @@ SpendFlow Planner
 
 SpendFlow Planner es una aplicación web responsive para control de gastos familiares, tarjetas de crédito, cuotas y flujo mensual de pagos.
 
-El sistema debe permitir registrar gastos de forma rápida, identificar quién gastó, con qué medio de pago, con qué cuenta de tarjeta y con qué tarjeta física/adicional. También debe proyectar cuánto dinero debe reservarse cada mes para pagar tarjetas.
+El sistema debe permitir registrar gastos de forma rápida, identificar quién gastó, con qué medio de pago, con qué cuenta de tarjeta y con qué tarjeta física/adicional. También debe proyectar cuánto dinero debe reservarse cada mes para pagar tarjetas y compromisos futuros.
 
 ## Stack técnico
 
-- Next.js 14 o superior
-- TypeScript
-- Tailwind CSS
-- Supabase PostgreSQL
-- Supabase Auth
-- Supabase Storage desde Fase 1.5
-- Deploy futuro en Vercel
-- App móvil futura con Expo / React Native
+- Next.js 14 o superior.
+- TypeScript estricto.
+- Tailwind CSS.
+- Supabase PostgreSQL.
+- Supabase Auth.
+- Supabase Storage.
+- OpenAI API.
+- PWA.
+- Deploy objetivo en Vercel.
+- App móvil futura con Expo / React Native si se decide avanzar.
 
 ## Idioma del proyecto
 
@@ -35,131 +78,47 @@ Regla obligatoria:
 
 ## Filosofía de desarrollo
 
-No construir todo de una sola vez.
+- Una tarea = una funcionalidad o cambio claramente delimitado.
+- No construir todo de una sola vez.
+- Desarrollar por fases y sprints.
+- Claridad antes que complejidad.
+- No romper lo que ya funciona.
+- Mantener código simple, mantenible y claro.
+- Si hay ambigüedad, elegir la opción más simple y dejar comentario.
 
-Desarrollar por fases.
-
-### Fase 1 — MVP funcional
-
-Incluye:
-
-- Registro manual de gastos.
-- Personas.
-- Categorías.
-- Medios de pago.
-- Cuentas de tarjeta.
-- Tarjetas físicas / adicionales.
-- Calendario flexible de cierres y vencimientos.
-- Compras en cuotas.
-- Carga inicial manual de cuotas pendientes.
-- Flujo mensual de pagos de tarjetas.
-- Historial de gastos con búsqueda y filtros.
-- Dashboard básico.
-
-No incluye:
-
-- Comprobantes.
-- OCR.
-- IA.
-- Conciliación automática.
-- Pagos parciales.
-- Intereses.
-- CFT observado.
-- App móvil nativa.
-
-### Fase 1.5 — Comprobantes
-
-Incluye:
-
-- Adjuntar foto de ticket/factura.
-- Adjuntar PDF.
-- Guardar archivo en Supabase Storage.
-- Asociar comprobante al gasto.
-- Ver comprobante desde detalle de gasto.
-
-No incluye OCR.
-
-### Fase 2 — Pagos parciales, saldos e intereses
-
-Incluye:
-
-- Registrar pago real de resumen de tarjeta.
-- Permitir pago parcial.
-- Arrastrar saldo financiado.
-- Cargar intereses manuales.
-- Calcular tasa implícita mensual.
-- Calcular tasa efectiva anual aproximada.
-- Comparar costo financiero observado por tarjeta.
-
-### Fase 3 — Importaciones masivas
-
-Incluye:
-
-- Importar gastos desde CSV/Excel.
-- Importar cuotas pendientes.
-- Importar calendario de tarjetas.
-- Validar filas antes de guardar.
-
-### Fase 4 — Conciliación manual
-
-Incluye:
-
-- Registrar total real de estado de cuenta.
-- Comparar total real vs total proyectado.
-- Mover cuotas manualmente.
-- Agregar ajustes manuales.
-
-### Fase 5 — OCR de facturas
-
-Incluye:
-
-- Leer factura o PDF.
-- Prellenar gasto.
-- Usuario valida antes de guardar.
-
-### Fase 6 — IA para conciliación
-
-Incluye:
-
-- Leer PDF de estado de cuenta.
-- Extraer movimientos.
-- Comparar contra gastos/cuotas.
-- Proponer conciliación.
-- Usuario valida.
-
-## Modelo conceptual
+## Reglas críticas heredadas del modelo conceptual
 
 El sistema debe separar:
 
-- Persona
-- Cuenta de tarjeta / estado de cuenta
-- Tarjeta física / adicional
-- Gasto
-- Cuota
-- Resumen de tarjeta
-- Pago real
-- Saldo financiado
-- Interés / ajuste
+- Persona.
+- Cuenta de tarjeta / estado de cuenta.
+- Tarjeta física / adicional.
+- Gasto.
+- Cuota.
+- Resumen de tarjeta.
+- Pago real.
+- Saldo financiado.
+- Interés / ajuste.
 
 Ejemplo real:
 
 Visa Galicia Manuel:
 
-- Manuel titular
-- Paola adicional
-- Estado de cuenta llega a nombre de Manuel
+- Manuel titular.
+- Paola adicional.
+- Estado de cuenta llega a nombre de Manuel.
 
 Visa Galicia Paola:
 
-- Paola titular
-- Suegra adicional
-- Estado de cuenta llega a nombre de Paola
+- Paola titular.
+- Suegra adicional.
+- Estado de cuenta llega a nombre de Paola.
 
 Por eso el sistema debe tener:
 
-- cuentas_tarjeta
-- tarjetas_fisicas
-- personas
+- `cuentas_tarjeta`.
+- `tarjetas_fisicas`.
+- `personas`.
 
 No tratar “Visa Galicia” como una sola tarjeta plana.
 
@@ -168,9 +127,9 @@ No tratar “Visa Galicia” como una sola tarjeta plana.
 1. `cuentas_tarjeta` representa el estado de cuenta.
 2. `tarjetas_fisicas` representa el plástico usado para gastar.
 3. Un gasto con tarjeta debe guardar:
-   - cuenta_tarjeta_id
-   - tarjeta_fisica_id
-   - persona_id
+   - `cuenta_tarjeta_id`.
+   - `tarjeta_fisica_id`.
+   - `persona_id`.
 
 ## Reglas de calendario
 
@@ -178,14 +137,14 @@ Los cierres y vencimientos varían mes a mes.
 
 Usar la tabla `calendario_tarjetas` como fuente principal.
 
-Campos:
+Campos relevantes:
 
-- cuenta_tarjeta_id
-- periodo_resumen
-- fecha_cierre
-- fecha_vencimiento
-- estado_calendario
-- origen_fecha
+- `cuenta_tarjeta_id`.
+- `periodo_resumen`.
+- `fecha_cierre`.
+- `fecha_vencimiento`.
+- `estado_calendario`.
+- `origen_fecha`.
 
 La configuración habitual en `cuentas_tarjeta` solo sirve como respaldo estimado.
 
@@ -196,28 +155,6 @@ Si un gasto con tarjeta tiene `cantidad_cuotas = 1`, generar una cuota 1/1.
 Si tiene más de una cuota, generar N registros en `cuotas_tarjeta`.
 
 Esto permite que el flujo mensual se calcule siempre desde `cuotas_tarjeta`.
-
-## Carga inicial de cuotas
-
-Cuando el usuario empieza a usar la app, puede tener cuotas anteriores.
-
-No cargar historia completa.
-
-Crear `compras_cuotas_iniciales` y generar cuotas futuras asociadas.
-
-Ejemplo:
-
-Compra Mercado Libre  
-Cuota pendiente inicial: 4  
-Total cuotas: 6  
-Monto cuota: 50.000  
-Primer período: 2026-07
-
-Generar:
-
-- 4/6 en 2026-07
-- 5/6 en 2026-08
-- 6/6 en 2026-09
 
 ## UX/UI
 
@@ -235,48 +172,32 @@ Reglas:
 - Categorías deben mostrarse como botones con iconos.
 - Campos avanzados colapsados.
 - Recordar últimas selecciones cuando sea posible.
+- Tema default: `dark-modern`.
+- Tema alternativo: `light-classic`.
+- Mobile debe usar bottom nav: Inicio, Nuevo, Gastos, Flujo, Más.
 
 ## Flujo de nuevo gasto
 
 Campos principales:
 
-1. Monto
-2. Medio de pago
-3. Cuenta de tarjeta si aplica
-4. Tarjeta física si aplica
-5. Establecimiento
-6. Categoría
-7. Fecha
-8. Persona
-9. Cuotas si aplica
-10. Observaciones opcionales
+1. Monto.
+2. Medio de pago.
+3. Cuenta de tarjeta si aplica.
+4. Tarjeta física si aplica.
+5. Establecimiento.
+6. Categoría.
+7. Fecha.
+8. Persona.
+9. Cuotas si aplica.
+10. Observaciones opcionales.
 
-En Fase 1 no incluir comprobantes.
+## Reglas de seguridad y datos
 
-## Tablas Fase 1
-
-Crear primero:
-
-- personas
-- categorias
-- medios_pago
-- cuentas_tarjeta
-- tarjetas_fisicas
-- calendario_tarjetas
-- gastos
-- compras_cuotas_iniciales
-- cuotas_tarjeta
-
-No crear tablas futuras hasta que se pidan.
-
-## Reglas para Codex
-
-- Una tarea = una funcionalidad.
-- No avanzar a otra fase sin instrucción explícita.
-- No implementar OCR ni IA en Fase 1.
-- No implementar comprobantes hasta Fase 1.5.
-- No implementar pagos parciales hasta Fase 2.
-- Mantener nombres en español.
-- Usar TypeScript estricto.
-- Priorizar código simple, mantenible y claro.
-- Si hay ambigüedad, elegir la opción más simple y dejar comentario.
+- Todas las pantallas operativas deben usar el grupo activo definido por `perfiles.grupo_id`.
+- No hacer consultas globales sin `grupo_id`.
+- No mostrar datos de otro grupo.
+- No desactivar RLS.
+- No crear migraciones salvo tarea explícita.
+- No tocar base de datos salvo tarea explícita.
+- No exponer `OPENAI_API_KEY` en frontend.
+- No exponer una service role key de Supabase en frontend.
