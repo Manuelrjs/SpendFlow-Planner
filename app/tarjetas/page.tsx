@@ -51,7 +51,7 @@ export default function Page() {
       supabase.from('tarjetas_fisicas').select('id, cuenta_tarjeta_id, persona_id, tipo, nombre_en_tarjeta, alias, ultimos_4_digitos, activo, observaciones, creado_en, persona:personas(id, nombre, apellido, activo)').eq('grupo_id', perfil.grupo_id).order('creado_en', { ascending: false }),
     ]);
     if (errorPersonas || errorCuentas || errorTarjetas) { setMensaje({ tipo: 'error', texto: 'No se pudo cargar la información de tarjetas.' }); setCargando(false); return; }
-    setPersonas(dataPersonas ?? []); setCuentas((dataCuentas as CuentaTarjeta[]) ?? []); setTarjetas((dataTarjetas as TarjetaFisica[]) ?? []); setCargando(false);
+    setPersonas(dataPersonas ?? []); setCuentas((dataCuentas as unknown as CuentaTarjeta[]) ?? []); setTarjetas((dataTarjetas as unknown as TarjetaFisica[]) ?? []); setCargando(false);
   }
 
   useEffect(() => { void cargarDatos(); }, []);
@@ -69,9 +69,9 @@ export default function Page() {
     if (!formCuenta.persona_titular_id) return setErrorCuenta('Debés seleccionar una persona titular.');
     const diaTexto = formCuenta.dia_cierre_habitual.trim();
     const diasVencTexto = formCuenta.dias_hasta_vencimiento.trim();
-    const dia = diaTexto ? Number.parseInt(diaTexto, 10) : null;
-    const diasVenc = diasVencTexto ? Number.parseInt(diasVencTexto, 10) : null;
     if (!diaTexto || !diasVencTexto) return setErrorCuenta('Para crear una cuenta de tarjeta, debés indicar día de cierre habitual y días hasta vencimiento.');
+    const dia = Number.parseInt(diaTexto, 10);
+    const diasVenc = Number.parseInt(diasVencTexto, 10);
     if (Number.isNaN(dia) || dia < 1 || dia > 31) return setErrorCuenta('El día de cierre habitual debe estar entre 1 y 31.');
     if (Number.isNaN(diasVenc) || diasVenc < 0 || diasVenc > 45) return setErrorCuenta('Los días hasta vencimiento deben estar entre 0 y 45.');
 
