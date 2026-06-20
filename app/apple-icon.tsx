@@ -14,7 +14,7 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(145deg, #047857 0%, #0284C7 100%)',
+          background: 'linear-gradient(135deg, #10B981 0%, #0F766E 100%)',
         }}
       >
         <div
@@ -22,18 +22,17 @@ export default function AppleIcon() {
             width: '74%',
             height: '74%',
             borderRadius: 36,
-            background: 'rgba(255,255,255,0.14)',
-            border: '4px solid rgba(255,255,255,0.28)',
+            background: 'rgba(255,255,255,0.08)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: 58,
-            fontWeight: 850,
-            letterSpacing: -3,
           }}
         >
-          SF
+          <svg viewBox="0 0 24 24" width="78" height="78" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 17l5-5 4 3 7-8" />
+            <path d="M15 7h5v5" />
+          </svg>
         </div>
       </div>
     ),
