@@ -14,21 +14,23 @@ export default function AppleIcon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: '#059669',
+          background: 'linear-gradient(145deg, #047857 0%, #0284C7 100%)',
         }}
       >
         <div
           style={{
-            width: '78%',
-            height: '78%',
-            borderRadius: '9999px',
-            background: '#0ea5a4',
+            width: '74%',
+            height: '74%',
+            borderRadius: 36,
+            background: 'rgba(255,255,255,0.14)',
+            border: '4px solid rgba(255,255,255,0.28)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: 62,
-            fontWeight: 800,
+            fontSize: 58,
+            fontWeight: 850,
+            letterSpacing: -3,
           }}
         >
           SF
