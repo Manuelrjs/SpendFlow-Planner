@@ -42,7 +42,7 @@ function Icono({ nombre }: { nombre: IconoNombre }) {
   };
   return <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 shrink-0 fill-none stroke-current stroke-[1.8]" strokeLinecap="round" strokeLinejoin="round">{trazos[nombre]}</svg>;
 }
-function LogoMarca() { return <span className="sf-brand-mark"><Icono nombre="flujo" /></span>; }
+function LogoMarca() { return <span className="sf-brand-mark" aria-hidden="true">SF</span>; }
 
 export function NavegacionPrincipal() {
   const pathname = usePathname(); const router = useRouter();
