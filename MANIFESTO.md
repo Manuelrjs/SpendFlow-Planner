@@ -172,15 +172,19 @@ Aclaraciones:
 
 ## 10. Estado actual
 
-La app está en etapa **pre-deploy a Vercel**.
+La app está desplegada en Vercel:
 
-Problema técnico actual:
+```text
+https://spend-flow-planner.vercel.app
+```
 
-- `npm run build` falla en `app/manifest.ts` cerca de `share_target`.
+El build y el deploy inicial ya fueron validados.
 
 Objetivo inmediato:
 
-- Corregir `app/manifest.ts` para que `npm run build` devuelva exit code `0`.
+- Ejecutar QA funcional completo en producción.
+- Confirmar login, grupo activo, invitaciones, gastos, tarjetas, flujo, comprobantes e IA.
+- Verificar que no haya fugas visibles de datos entre grupos.
 
 ## 11. Objetivo final de la fase actual
 

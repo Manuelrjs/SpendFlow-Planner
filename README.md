@@ -230,10 +230,14 @@ Si Vercel asigna otra URL real, reemplazar el ejemplo por esa URL tanto en Supab
 
 ## Estado actual
 
-La app está en etapa **pre-deploy a Vercel**.
+La app está desplegada en Vercel:
+
+```text
+https://spend-flow-planner.vercel.app
+```
 
 Tarea activa según `SPRINTS.md`:
 
-- Corregir `npm run build` en `app/manifest.ts`.
-- Error actual: build falla cerca de `share_target`.
-- Resultado esperado: `rm -rf .next && npm run build` con exit code `0`.
+- Sprint 2 — QA funcional completo.
+- Validar flujos principales en producción.
+- Confirmar separación por grupo y ausencia de errores bloqueantes.

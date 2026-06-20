@@ -2,11 +2,13 @@
 
 Este roadmap organiza el trabajo por fases y sprints. Debe actualizarse cuando cambie el objetivo de una fase o se complete un sprint relevante.
 
-## Fase actual: Pre-deploy
+## Fase actual: QA funcional
 
-Objetivo general: llegar a una versión estable, construible y desplegable en Vercel, manteniendo la separación por grupo, la seguridad RLS y la experiencia PWA como prioridades.
+Objetivo general: validar que la versión desplegada en Vercel funcione de punta a punta, manteniendo la separación por grupo, la seguridad RLS y la experiencia PWA como prioridades.
 
 ## Sprint 1 — Build y Vercel
+
+**Estado:** completado.
 
 ### Objetivo
 
@@ -29,6 +31,8 @@ Lograr que el proyecto compile correctamente y quede listo para el primer deploy
 - Login/registro funcionan con las Redirect URLs configuradas.
 
 ## Sprint 2 — QA funcional completo
+
+**Estado:** activo.
 
 ### Objetivo
 

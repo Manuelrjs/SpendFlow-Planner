@@ -4,30 +4,40 @@ Este archivo indica el sprint activo y la tarea inmediata. Codex debe consultarl
 
 ## Sprint activo
 
-**Sprint 1 — Build y Vercel**
+**Sprint 2 — QA funcional completo**
 
 ## Tarea actual
 
-Corregir `npm run build` en `app/manifest.ts`.
+Validar el flujo principal de punta a punta en producción, empezando por login, grupo activo y navegación básica.
 
-## Error actual
+## Sprint anterior completado
 
-El build falla cerca de `share_target`.
+**Sprint 1 — Build y Vercel**
+
+- `npm run build` corregido.
+- Deploy publicado en Vercel.
+- URL de producción: `https://spend-flow-planner.vercel.app`.
+- Variables de entorno cargadas en Vercel.
+- Redirect URLs de Supabase configuradas.
+- Login/registro básico validado en producción.
+
+## Problema pendiente
+
+Completar QA funcional para confirmar que no haya errores bloqueantes ni fugas visibles de datos entre grupos.
 
 ## Validación
 
-```bash
-rm -rf .next
-npm run build
-echo $?
-```
+- Probar login y cierre de sesión.
+- Probar creación y cambio de grupo activo.
+- Probar invitaciones por link.
+- Probar administración de miembros y roles.
+- Probar alta de gastos.
+- Probar tarjetas, calendario y flujo mensual.
+- Probar cuotas iniciales.
+- Probar reportes e historial.
+- Probar comprobantes por grupo.
+- Verificar que un usuario no vea datos de otro grupo.
 
-## Resultado esperado
+## Siguiente tarea inmediata
 
-```text
-0
-```
-
-## Siguiente tarea después de build
-
-Deploy en Vercel.
+Probar creación/cambio de grupo activo y navegación principal en producción.
