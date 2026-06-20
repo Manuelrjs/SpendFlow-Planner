@@ -57,7 +57,11 @@ export function NavegacionPrincipal() {
   }, [masAbierto]);
   if (pathname === '/login' || pathname === '/registro' || pathname === '/aceptar-invitacion') return null;
 
-  const estaActivo = (href: string) => href === '/' ? pathname === '/' : pathname.startsWith(href);
+  const estaActivo = (href: string) => {
+    if (href === '/') return pathname === '/';
+    if (href === '/gastos') return pathname === '/gastos';
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
   const cerrarSesion = async () => { await cerrarSesionAuth(); router.replace('/login'); };
   const nombreGrupo = perfil?.grupo_nombre ?? 'Preparando grupo...'; const email = session?.user.email ?? 'Sesión activa';
 
