@@ -1,5 +1,6 @@
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase/client';
+import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
 
 type Perfil = {
   id: string;
@@ -81,6 +82,7 @@ export async function ensureUserProfile(user: User): Promise<Perfil> {
         console.debug('[debug] ensureUserProfile: perfil encontrado', { userId: user.id, grupo_id: perfilActual.grupo_id });
       }
       await asegurarMembresiaActual();
+      await asegurarCatalogosBaseGrupo(supabase, perfilActual.grupo_id);
       return perfilActual;
     }
 
@@ -113,6 +115,7 @@ export async function ensureUserProfile(user: User): Promise<Perfil> {
       }
 
       await asegurarMembresiaActual();
+      await asegurarCatalogosBaseGrupo(supabase, perfilCreado.grupo_id);
       return perfilCreado;
     }
 
@@ -133,6 +136,7 @@ export async function ensureUserProfile(user: User): Promise<Perfil> {
     }
 
     await asegurarMembresiaActual();
+    await asegurarCatalogosBaseGrupo(supabase, perfilActualizado.grupo_id);
     return perfilActualizado;
   })();
 
