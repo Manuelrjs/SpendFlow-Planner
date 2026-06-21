@@ -57,13 +57,14 @@ async function asegurarCategoriasBase(supabase: SupabaseClient, grupoId: string)
   const nombresExistentes = new Set((data ?? []).map((item) => normalizarNombre(item.nombre)));
   const faltantes = CATEGORIAS_BASE.filter((categoria) => !nombresExistentes.has(normalizarNombre(categoria.nombre)));
 
-  if (faltantes.length === 0) return;
+  if (faltantes.length === 0) return 0;
 
   const { error: errorInsert } = await supabase
     .from('categorias')
     .insert(faltantes.map((categoria) => ({ ...categoria, grupo_id: grupoId })));
 
   if (errorInsert) throw new Error('No se pudieron crear las categorías base del grupo.');
+  return faltantes.length;
 }
 
 async function asegurarMediosPagoBase(supabase: SupabaseClient, grupoId: string) {
@@ -77,18 +78,21 @@ async function asegurarMediosPagoBase(supabase: SupabaseClient, grupoId: string)
   const tiposExistentes = new Set((data ?? []).map((item) => item.tipo));
   const faltantes = MEDIOS_PAGO_BASE.filter((medio) => !tiposExistentes.has(medio.tipo));
 
-  if (faltantes.length === 0) return;
+  if (faltantes.length === 0) return 0;
 
   const { error: errorInsert } = await supabase
     .from('medios_pago')
     .insert(faltantes.map((medio) => ({ ...medio, grupo_id: grupoId })));
 
   if (errorInsert) throw new Error('No se pudieron crear los medios de pago base del grupo.');
+  return faltantes.length;
 }
 
 export async function asegurarCatalogosBaseGrupo(supabase: SupabaseClient, grupoId: string | null | undefined) {
   if (!grupoId) throw new Error('No se pudo preparar el grupo activo para crear catálogos base.');
 
-  await asegurarCategoriasBase(supabase, grupoId);
-  await asegurarMediosPagoBase(supabase, grupoId);
+  const categoriasCreadas = await asegurarCategoriasBase(supabase, grupoId);
+  const mediosPagoCreados = await asegurarMediosPagoBase(supabase, grupoId);
+
+  return { categoriasCreadas, mediosPagoCreados };
 }

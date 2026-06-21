@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { consolidarDuplicadosCalendario, obtenerOCrearCalendarioEstimado, type CalendarioTarjetaDB } from '@/lib/calendario-tarjetas';
+import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
 import { calcularPeriodoResumenYVencimiento } from '@/utils/tarjetas';
 
 type AnyObj = Record<string, any>;
@@ -43,6 +44,7 @@ export default function MantenimientoPage() {
   const [grupoId, setGrupoId] = useState<string | null>(null);
   const [usuarioEmail, setUsuarioEmail] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+  const [creandoCatalogos, setCreandoCatalogos] = useState(false);
   const [mensaje, setMensaje] = useState('');
   const [cardSeleccionada, setCardSeleccionada] = useState<DiagnosticoKey | null>(null);
   const [gastoDetalle, setGastoDetalle] = useState<AnyObj | null>(null);
@@ -340,6 +342,27 @@ export default function MantenimientoPage() {
   async function consolidarGrupo(grupo: { items: CalendarioTarjetaDB[] }) { if (!grupoId) return setMensaje('Cargando grupo…'); await consolidarDuplicadosCalendario(supabase, grupo.items, grupoId); setMensaje('Duplicados consolidados.'); await diagnosticar(); }
   async function repararSeguro() { for (const c of data.compromisosSinCalendario) await regenerarCalendario(c); for (const g of data.duplicadosCalendario) await consolidarGrupo(g); setMensaje('Reparación automática segura finalizada: se regeneraron calendarios faltantes y se consolidaron duplicados claros.'); await diagnosticar(); }
 
+  async function crearCatalogosBaseFaltantes() {
+    if (!grupoId) return setMensaje('Cargando grupo...');
+    const confirmado = window.confirm('Esto creará solo las categorías y medios de pago base que falten en el grupo activo. No modifica ni borra los existentes.');
+    if (!confirmado) return;
+    setCreandoCatalogos(true);
+    setMensaje('');
+    try {
+      const { categoriasCreadas, mediosPagoCreados } = await asegurarCatalogosBaseGrupo(supabase, grupoId);
+      if (categoriasCreadas === 0 && mediosPagoCreados === 0) {
+        setMensaje('Los catálogos base del grupo activo ya estaban completos.');
+      } else {
+        setMensaje(`Catálogos base creados: ${categoriasCreadas} categorías y ${mediosPagoCreados} medios de pago.`);
+      }
+    } catch (error) {
+      console.error('Error creando catálogos base faltantes', error);
+      setMensaje(error instanceof Error ? error.message : 'No se pudieron crear los catálogos base faltantes.');
+    } finally {
+      setCreandoCatalogos(false);
+    }
+  }
+
   const cards = useMemo(() => [
     { key: 'gastosSinCompromiso' as const, titulo: 'Gastos de tarjeta sin compromiso', valor: data.gastosSinCompromiso.length, error: erroresDiagnostico.gastosSinCompromiso },
     { key: 'compromisosSinCalendario' as const, titulo: 'Compromisos sin calendario', valor: data.compromisosSinCalendario.length, error: erroresDiagnostico.compromisosSinCalendario },
@@ -354,6 +377,9 @@ export default function MantenimientoPage() {
   return <main className="space-y-4 p-4 md:p-6">{/* UI abreviada por cambios */}
     <h1 className="text-2xl font-semibold">Mantenimiento</h1>
     <div className="flex flex-wrap gap-2"><button onClick={() => void diagnosticar()} disabled={cargando || !grupoId} className="rounded-lg bg-slate-900 px-4 py-2 text-white">{cargando ? 'Ejecutando...' : 'Ejecutar diagnóstico'}</button><button onClick={() => void repararSeguro()} className="rounded-lg border px-4 py-2">Reparar automáticamente lo seguro</button></div>
+    <div>
+      <button onClick={() => void crearCatalogosBaseFaltantes()} disabled={creandoCatalogos || !grupoId} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-700 disabled:opacity-60">{creandoCatalogos ? 'Creando catálogos...' : 'Crear catálogos base faltantes'}</button>
+    </div>
     {mensaje && <p className="text-sm text-slate-600">{mensaje}</p>}
     <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{cards.map((c) => <div key={c.key} className={`rounded-xl border bg-[var(--surface)] p-4 text-left ${cardSeleccionada === c.key ? 'border-slate-900 ring-1 ring-slate-900' : ''}`}><p className="text-xs text-slate-500">{c.titulo}</p>{c.error ? <><p className="mt-1 text-sm font-semibold text-rose-700">Error al diagnosticar</p><p className="mt-1 text-xs text-slate-600">Ver error abajo.</p><div className="mt-2 flex gap-2">{esDesarrollo && <button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => void navigator.clipboard.writeText(`Error en ${c.titulo}: ${c.error}`)}>Copiar error</button>}<button type="button" className="rounded border px-2 py-1 text-xs" onClick={() => setCardSeleccionada(c.key)}>Ver error</button></div>{cardSeleccionada === c.key && esDesarrollo && <p className="mt-2 break-words rounded bg-rose-50 p-2 text-xs text-rose-800">Error en {c.titulo}: {c.error}</p>}</> : <button onClick={() => c.valor > 0 && setCardSeleccionada(c.key)} className={`${c.valor > 0 ? 'cursor-pointer hover:border-slate-400' : 'cursor-default opacity-80'}`}><p className="text-2xl font-bold">{c.valor}</p></button>}</div>)}</section>
     {cardSeleccionada === 'compromisosSinCalendario' && <section className="space-y-2 rounded-xl border bg-[var(--surface)] p-4"><p className="text-sm text-slate-600">Estos compromisos activos sí se pueden reparar regenerando calendario de resumen. El período de pago se muestra solo como referencia de flujo.</p>{data.compromisosSinCalendario.map((c) => <div key={c.id} className="rounded-lg border p-3 text-sm md:grid md:grid-cols-10 md:gap-2"><span>{c.cuenta?.nombre_cuenta}</span><span>{c.gasto?.fecha_gasto ?? '-'}</span><span>{c.periodo_resumen_faltante ?? '-'}</span><span>{c.periodo_pago_flujo ?? c.periodo_pago_estimado}</span><span>{c.establecimiento}</span><span>{c.monto_cuota}</span><span>{c.persona?.nombre}</span><span>{c.origen_cuota === 'carga_inicial' ? 'Carga inicial' : c.origen_cuota}</span><span>{c.estado}</span><div className="flex gap-2"><button onClick={() => void regenerarCalendario(c)} className="rounded border px-2">Regenerar calendario</button>{c.origen_cuota === 'carga_inicial' ? (c.compra_cuota_inicial_id ? <button className="rounded border px-2" onClick={() => void abrirDetalleCargaInicialDesdeCuota(c)}>Ver carga inicial</button> : <span className="text-xs text-slate-500">Sin referencia de carga inicial</span>) : (c.gasto_id ? <button className="rounded border px-2" onClick={() => void abrirDetalleGastoDesdeCuota(c)}>Ver gasto</button> : <span className="text-xs text-slate-500">Gasto no disponible</span>)}</div></div>)}</section>}
