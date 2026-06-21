@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuthSpendWise } from '@/components/auth-context';
 import { limpiarPerfilActivoCache } from '@/lib/auth/grupo-activo';
+import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
 import { supabase } from '@/lib/supabase/client';
 
 type Invitacion = { id: string; grupo_id: string; email_invitado: string; rol: string; estado: string; expira_en: string | null; grupo_nombre: string | null };
@@ -61,6 +62,7 @@ export default function AceptarInvitacionPage() {
       return;
     }
     limpiarPerfilActivoCache();
+    await asegurarCatalogosBaseGrupo(supabase, grupoAceptado.id);
     await reintentarPerfil();
     window.location.assign('/configuracion/grupo');
   }
