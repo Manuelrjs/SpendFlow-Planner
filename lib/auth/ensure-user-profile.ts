@@ -82,7 +82,6 @@ export async function ensureUserProfile(user: User): Promise<Perfil> {
         console.debug('[debug] ensureUserProfile: perfil encontrado', { userId: user.id, grupo_id: perfilActual.grupo_id });
       }
       await asegurarMembresiaActual();
-      await asegurarCatalogosBaseGrupo(supabase, perfilActual.grupo_id);
       return perfilActual;
     }
 

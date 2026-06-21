@@ -12,7 +12,6 @@ import {
   obtenerPerfilActivoCacheado,
   type PerfilActivo,
 } from '@/lib/auth/grupo-activo';
-import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
 import { AuthSpendWiseProvider } from '@/components/auth-context';
 import { SelectorGrupoActivo } from '@/components/selector-grupo-activo';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
@@ -81,13 +80,11 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     const perfilCacheado = obtenerPerfilActivoCacheado();
     if (!forzar && perfilLoadedRef.current && perfilActualRef.current?.userId === user.id) {
       debugAuth('perfil ya estaba cargado en contexto', { userId: user.id, grupo_id: perfilActualRef.current.grupo_id });
-      await asegurarCatalogosBaseGrupo(supabase, perfilActualRef.current.grupo_id);
       return perfilActualRef.current;
     }
 
     if (!forzar && perfilCacheado?.userId === user.id) {
       debugAuth('perfil recuperado desde cache', { userId: user.id, grupo_id: perfilCacheado.grupo_id });
-      await asegurarCatalogosBaseGrupo(supabase, perfilCacheado.grupo_id);
       setPerfil(perfilCacheado);
       setPerfilLoaded(true);
       return perfilCacheado;

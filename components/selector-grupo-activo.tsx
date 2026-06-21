@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthSpendWise } from '@/components/auth-context';
 import { limpiarPerfilActivoCache } from '@/lib/auth/grupo-activo';
-import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
 import { supabase } from '@/lib/supabase/client';
 
 type MembresiaGrupo = {
@@ -65,7 +64,6 @@ export function SelectorGrupoActivo({ mostrarTitulo = false, onError }: Selector
     }
 
     limpiarPerfilActivoCache();
-    await asegurarCatalogosBaseGrupo(supabase, grupoId);
     await reintentarPerfil();
     window.location.reload();
   }
