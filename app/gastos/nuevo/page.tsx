@@ -173,7 +173,7 @@ export default function Page() {
   }
 
   async function asegurarCalendario(cuenta: CuentaTarjeta, periodo: string) {
-    const resultado = await obtenerOCrearCalendarioEstimado({ supabase, cuenta, periodo, contexto: 'gasto' });
+    const resultado = await obtenerOCrearCalendarioEstimado({ supabase, cuenta, periodo, contexto: 'gasto', grupoId });
     const calendario = resultado.calendario as CalendarioTarjeta;
     setCalendarios((prev) => {
       const sinMismoPeriodo = prev.filter((cal) => !(cal.cuenta_tarjeta_id === cuenta.id && cal.periodo_resumen === periodo));
