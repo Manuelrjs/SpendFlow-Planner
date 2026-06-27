@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 type FeedbackToastTipo = 'ok' | 'error' | 'warning' | 'info';
 
 type FeedbackToastProps = {
@@ -22,7 +24,22 @@ const etiquetaPorTipo: Record<FeedbackToastTipo, string> = {
 };
 
 export function FeedbackToast({ mensaje, tipo = 'info' }: FeedbackToastProps) {
-  if (!mensaje) return null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!mensaje) {
+      setVisible(false);
+      return undefined;
+    }
+
+    setVisible(true);
+    const duracion = tipo === 'error' ? 7000 : 4200;
+    const timeoutId = window.setTimeout(() => setVisible(false), duracion);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [mensaje, tipo]);
+
+  if (!mensaje || !visible) return null;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[max(5.25rem,calc(4.25rem+env(safe-area-inset-bottom)))] z-[65] flex justify-center px-4 lg:bottom-6">
