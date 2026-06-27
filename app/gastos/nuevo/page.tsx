@@ -252,6 +252,10 @@ export default function Page() {
       setError('Completá el nombre de categoría.');
       return;
     }
+    if (!grupoId) {
+      setError('No se pudo cargar el grupo activo.');
+      return;
+    }
     setCreandoCategoria(true);
     setError(null);
     setMensajeComprobante(null);
@@ -268,7 +272,7 @@ export default function Page() {
     const ordenMaximo = categorias.reduce((maximo, categoria) => Math.max(maximo, categoria.orden ?? 0), 0);
     const { data, error: errorInsert } = await supabase
       .from('categorias')
-      .insert({ nombre: nombreSugerido, activo: true, orden: ordenMaximo + 1, icono: nuevaCategoriaIcono.trim() || null, color: nuevaCategoriaColor.trim() || null })
+      .insert({ nombre: nombreSugerido, activo: true, orden: ordenMaximo + 1, icono: nuevaCategoriaIcono.trim() || null, color: nuevaCategoriaColor.trim() || null, grupo_id: grupoId })
       .select('id,nombre,icono,color,activo,orden')
       .single();
     if (errorInsert || !data) {
