@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { BUCKET_COMPROBANTES, MENSAJE_ERROR_BUCKET_COMPROBANTES, crearRutaStorageComprobante, detectarTipoComprobante, esImagenTipoArchivo, esPdfTipoArchivo, obtenerNombreArchivoDesdeRuta, validarComprobante, type TipoComprobante } from '@/lib/comprobantes';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
 import {
   calcularPeriodoResumenYVencimiento,
@@ -564,6 +565,7 @@ export default function Page() {
   const urlComprobantePreview = urlComprobanteFirmada;
 
   return <section className="space-y-4">
+    <FeedbackToast tipo={error ? 'error' : mensajeExito ? 'ok' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensajeExito ?? mensajeComprobante} />
     <h1 className="text-2xl font-semibold">Historial de gastos {filtros.estado_registro === 'anulados' ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Vista Anulados</span> : null}</h1>
     {mensajeExito && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{mensajeExito}</p>}
     {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}

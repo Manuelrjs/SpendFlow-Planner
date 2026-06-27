@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { registrarErrorSpendWise, type ErrorTecnico } from '@/lib/errores';
 import { consolidarDuplicadosCalendario, obtenerOCrearCalendarioEstimado } from '@/lib/calendario-tarjetas';
 
@@ -533,6 +534,7 @@ export default function Page() {
 
   return (
     <section className="mx-auto max-w-[1440px] space-y-5 px-2 pb-6 md:px-4">
+      <FeedbackToast tipo={mensaje?.tipo === 'error' ? 'error' : 'ok'} mensaje={mensaje?.texto} />
       <header className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">SpendFlow Planner</p>
         <h1 className="text-2xl font-semibold">Calendario de cierres y vencimientos</h1>

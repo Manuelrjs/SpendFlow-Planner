@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { consolidarDuplicadosCalendario, obtenerOCrearCalendarioEstimado, type CalendarioTarjetaDB } from '@/lib/calendario-tarjetas';
 import { asegurarCatalogosBaseGrupo } from '@/lib/onboarding/catalogos-base';
@@ -375,6 +376,7 @@ export default function MantenimientoPage() {
   ], [data, erroresDiagnostico]);
 
   return <main className="space-y-4 p-4 md:p-6">{/* UI abreviada por cambios */}
+    <FeedbackToast tipo="info" mensaje={mensaje} />
     <h1 className="text-2xl font-semibold">Mantenimiento</h1>
     <div className="flex flex-wrap gap-2"><button onClick={() => void diagnosticar()} disabled={cargando || !grupoId} className="rounded-lg bg-slate-900 px-4 py-2 text-white">{cargando ? 'Ejecutando...' : 'Ejecutar diagnóstico'}</button><button onClick={() => void repararSeguro()} className="rounded-lg border px-4 py-2">Reparar automáticamente lo seguro</button></div>
     <div>

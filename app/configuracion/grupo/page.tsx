@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useAuthSpendWise } from '@/components/auth-context';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { SelectorGrupoActivo } from '@/components/selector-grupo-activo';
 import { limpiarPerfilActivoCache } from '@/lib/auth/grupo-activo';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
@@ -186,6 +187,7 @@ export default function GrupoPage() {
   }
 
   return <section className="mx-auto max-w-5xl space-y-6">
+    <FeedbackToast tipo={mensaje?.tipo === 'error' ? 'error' : 'ok'} mensaje={mensaje?.texto} />
     <header><p className="sf-kicker mb-1">Espacio compartido</p><h1 className="text-2xl font-bold">Grupo</h1><p className="mt-1 text-sm text-slate-600">Administrá quién comparte los gastos y tarjetas del grupo activo.</p></header>
     {mensaje && <div className={`rounded-xl border px-4 py-3 text-sm ${mensaje.tipo === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>{mensaje.texto}</div>}
     <ErrorTecnicoDesarrollo error={errorTecnico} />

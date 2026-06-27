@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { construirFechaCierreEstimada, construirFechaVencimientoEstimada, sumarMesesPeriodo } from '@/utils/tarjetas';
 
 type CuentaTarjeta = { id: string; nombre_cuenta: string; banco: string | null; marca: string | null; dia_cierre_habitual: number | null; dias_hasta_vencimiento: number | null };
@@ -280,6 +281,7 @@ export default function Page() {
 
   return (
     <section className="mx-auto max-w-6xl space-y-4">
+      <FeedbackToast tipo={error ? 'error' : 'ok'} mensaje={error ?? mensaje} />
       <h1 className="text-2xl font-semibold">Cuotas iniciales</h1>
       <p className="text-sm text-slate-600">Cargá compras anteriores con cuotas pendientes sin registrar el gasto histórico completo.</p>
       {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>}

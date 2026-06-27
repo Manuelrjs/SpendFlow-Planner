@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
+import { FeedbackToast } from '@/components/feedback-toast';
 
 type Persona = { id: string; nombre: string; apellido: string | null; activo: boolean };
 type CuentaTarjeta = { id: string; nombre_cuenta: string; banco: string | null; marca: string | null; persona_titular_id: string; activo: boolean; color_ui: string | null; icono_ui: string | null; dia_cierre_habitual: number | null; dias_hasta_vencimiento: number | null; observaciones: string | null; creado_en: string; persona_titular: Persona | null };
@@ -103,6 +104,7 @@ export default function Page() {
   function cuentaSinConfiguracion(cuenta: CuentaTarjeta) { return cuenta.dia_cierre_habitual === null || cuenta.dias_hasta_vencimiento === null; }
 
   return <section className="mx-auto max-w-[1440px] space-y-5 px-2 pb-6 md:px-4">
+    <FeedbackToast tipo={mensaje?.tipo === 'error' || errorCuenta || errorTarjeta ? 'error' : 'ok'} mensaje={mensaje?.texto ?? errorCuenta ?? errorTarjeta} />
     <header className="space-y-2"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">SpendFlow Planner</p><h1 className="text-2xl font-semibold">Tarjetas</h1><p className="text-sm text-slate-600">Gestioná tus cuentas, tarjetas titulares y adicionales en un solo lugar.</p></header>
     {mensaje && <div className={`rounded-xl border px-4 py-3 text-sm ${mensaje.tipo === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'}`}>{mensaje.texto}</div>}
 

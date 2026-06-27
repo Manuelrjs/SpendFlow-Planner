@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
+import { FeedbackToast } from '@/components/feedback-toast';
 import { registrarErrorSpendWise, type ErrorTecnico } from '@/lib/errores';
 
 type Persona = {
@@ -224,6 +225,7 @@ export default function Page() {
 
   return (
     <section className="mx-auto max-w-6xl space-y-6">
+      <FeedbackToast tipo={mensaje?.tipo === 'error' ? 'error' : 'ok'} mensaje={mensaje?.texto} />
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Configuración · Personas</h1>
         <p className="text-sm text-slate-600">Administrá las personas que pueden registrar gastos.</p>
