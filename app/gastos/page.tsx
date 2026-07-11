@@ -4,6 +4,7 @@ import { ChangeEvent, ClipboardEvent, DragEvent, FormEvent, useEffect, useMemo, 
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { BUCKET_COMPROBANTES, MENSAJE_ERROR_BUCKET_COMPROBANTES, crearRutaStorageComprobante, detectarTipoComprobante, esImagenTipoArchivo, esPdfTipoArchivo, obtenerNombreArchivoDesdeRuta, validarComprobante, type TipoComprobante } from '@/lib/comprobantes';
+import { comprimirImagenComprobante } from '@/lib/comprobantes-imagen';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
@@ -405,17 +406,28 @@ export default function Page() {
 
 
 
-  function seleccionarComprobante(archivo: File | null) {
-    if (!archivo) return;
-    const validacion = validarComprobante(archivo);
-    if (!validacion.valido) return setError(validacion.mensaje);
-    setComprobanteNuevo(archivo);
-    setMensajeComprobante(null);
+  async function seleccionarComprobante(archivo: File | null) {
+    if (!archivo) return false;
+    setComprobanteNuevo(null);
+    if (archivo.type.startsWith('image/')) setMensajeComprobante('Optimizando imagen...');
+    const resultado = await comprimirImagenComprobante(archivo);
+    const archivoPreparado = resultado.archivo;
+    const validacion = validarComprobante(archivoPreparado);
+    if (!validacion.valido) {
+      setMensajeComprobante(null);
+      setError(validacion.mensaje);
+      return false;
+    }
+    setComprobanteNuevo(archivoPreparado);
+    setMensajeComprobante(resultado.comprimido
+      ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.`
+      : null);
     setError(null);
+    return true;
   }
 
   function manejarCambioArchivo(event: ChangeEvent<HTMLInputElement>) {
-    seleccionarComprobante(event.target.files?.[0] ?? null);
+    void seleccionarComprobante(event.target.files?.[0] ?? null);
     event.currentTarget.value = '';
   }
 
@@ -425,7 +437,7 @@ export default function Page() {
     event.preventDefault();
     const blob = item.getAsFile();
     if (!blob) return setMensajeComprobante('No se detectó una imagen en el portapapeles.');
-    seleccionarComprobante(new File([blob], crearNombreComprobantePegado(), { type: 'image/png' }));
+    void seleccionarComprobante(new File([blob], crearNombreComprobantePegado(), { type: 'image/png' }));
   }
 
   async function pegarComprobanteDesdeBoton() {
@@ -442,7 +454,7 @@ export default function Page() {
       }
       const tipoImagen = itemConImagen.types.find((tipo) => tipo.startsWith('image/')) ?? 'image/png';
       const blob = await itemConImagen.getType(tipoImagen);
-      seleccionarComprobante(new File([blob], crearNombreComprobantePegado(), { type: tipoImagen }));
+      void seleccionarComprobante(new File([blob], crearNombreComprobantePegado(), { type: tipoImagen }));
     } catch {
       setMensajeComprobante('No se pudo leer el portapapeles. Permití acceso o usá Ctrl+V / ⌘V.');
     }
@@ -451,7 +463,7 @@ export default function Page() {
   function manejarDropComprobante(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setArrastrandoComprobante(false);
-    seleccionarComprobante(event.dataTransfer.files?.[0] ?? null);
+    void seleccionarComprobante(event.dataTransfer.files?.[0] ?? null);
   }
 
   async function agregarComprobanteAGasto(gastoId: string, archivo: File | null) {
