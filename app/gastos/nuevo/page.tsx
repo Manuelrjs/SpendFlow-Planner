@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { obtenerPerfilActivo } from '@/lib/auth/grupo-activo';
 import { BUCKET_COMPROBANTES, MENSAJE_ERROR_BUCKET_COMPROBANTES, crearRutaStorageComprobante, detectarTipoComprobante, obtenerNombreArchivoDesdeRuta, validarComprobante } from '@/lib/comprobantes';
+import { comprimirImagenComprobante } from '@/lib/comprobantes-imagen';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
@@ -138,8 +139,7 @@ export default function Page() {
         const nombreHeader = respuesta.headers.get('X-Shared-Filename');
         const nombre = nombreHeader ? decodeURIComponent(nombreHeader) : 'comprobante-compartido';
         const archivoCompartido = new File([blob], nombre, { type: blob.type || 'application/octet-stream' });
-        seleccionarComprobante(archivoCompartido);
-        setMensajeComprobante('Comprobante compartido precargado. Revisá y confirmá antes de guardar.');
+        await seleccionarComprobante(archivoCompartido, 'Comprobante compartido precargado. Revisá y confirmá antes de guardar.');
       } catch {
         setMensajeComprobante('No se pudo recuperar el comprobante compartido. Podés subirlo manualmente.');
       }
@@ -191,14 +191,26 @@ export default function Page() {
     setMensajeComprobante(null);
   }
 
-  function seleccionarComprobante(archivo: File | null) {
-    if (!archivo) return;
-    const validacion = validarComprobante(archivo);
-    if (!validacion.valido) return setError(validacion.mensaje);
-    setComprobante(archivo);
+  async function seleccionarComprobante(archivo: File | null, mensajeExito?: string) {
+    if (!archivo) return false;
+    setComprobante(null);
     setSugerenciasIA(null);
-    setMensajeComprobante(null);
+    setEstablecimientoSeleccionadoIA('');
+    if (archivo.type.startsWith('image/')) setMensajeComprobante('Optimizando imagen...');
+    const resultado = await comprimirImagenComprobante(archivo);
+    const archivoPreparado = resultado.archivo;
+    const validacion = validarComprobante(archivoPreparado);
+    if (!validacion.valido) {
+      setMensajeComprobante(null);
+      setError(validacion.mensaje);
+      return false;
+    }
+    setComprobante(archivoPreparado);
+    setMensajeComprobante(resultado.comprimido
+      ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.`
+      : mensajeExito ?? null);
     setError(null);
+    return true;
   }
 
   async function analizarComprobante() {
@@ -304,7 +316,7 @@ export default function Page() {
   }
 
   function manejarCambioArchivo(event: ChangeEvent<HTMLInputElement>) {
-    seleccionarComprobante(event.target.files?.[0] ?? null);
+    void seleccionarComprobante(event.target.files?.[0] ?? null);
     event.currentTarget.value = '';
   }
 
@@ -315,7 +327,7 @@ export default function Page() {
     const blob = item.getAsFile();
     if (!blob) return setMensajeComprobante('No se detectó una imagen en el portapapeles.');
     const archivoPegado = new File([blob], crearNombreComprobantePegado(), { type: 'image/png' });
-    seleccionarComprobante(archivoPegado);
+    void seleccionarComprobante(archivoPegado);
   }
 
   async function pegarComprobanteDesdeBoton() {
@@ -333,7 +345,7 @@ export default function Page() {
       const tipoImagen = itemConImagen.types.find((tipo) => tipo.startsWith('image/')) ?? 'image/png';
       const blob = await itemConImagen.getType(tipoImagen);
       const archivoPegado = new File([blob], crearNombreComprobantePegado(), { type: tipoImagen });
-      seleccionarComprobante(archivoPegado);
+      void seleccionarComprobante(archivoPegado);
     } catch {
       setMensajeComprobante('No se pudo leer el portapapeles. Permití acceso o usá Ctrl+V / ⌘V.');
     }
@@ -342,7 +354,7 @@ export default function Page() {
   function manejarDropComprobante(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setArrastrandoComprobante(false);
-    seleccionarComprobante(event.dataTransfer.files?.[0] ?? null);
+    void seleccionarComprobante(event.dataTransfer.files?.[0] ?? null);
   }
 
   async function guardar(event: FormEvent) {
