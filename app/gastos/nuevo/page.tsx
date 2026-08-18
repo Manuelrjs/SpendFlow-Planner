@@ -1055,11 +1055,23 @@ export default function Page() {
             ))}
           </select>
         </div>
-        <button type="button" onClick={() => setMostrarAvanzado((v) => !v)} className="text-sm text-slate-600">
-          {mostrarAvanzado ? 'Ocultar campos avanzados' : 'Mostrar campos avanzados'}
+        <button
+          type="button"
+          aria-expanded={mostrarAvanzado}
+          aria-controls="campos-opcionales-gasto"
+          onClick={() => setMostrarAvanzado((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-[var(--surface-2)] px-4 py-3 text-left"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-[var(--text-primary)]">Descripción y observaciones</span>
+            <span className="mt-0.5 block text-xs text-slate-500">Campos opcionales · Tocá para {mostrarAvanzado ? 'ocultarlos' : 'completarlos'}</span>
+          </span>
+          <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--surface-3)] text-lg font-semibold transition-transform ${mostrarAvanzado ? 'rotate-180' : ''}`} aria-hidden="true">
+            ↓
+          </span>
         </button>
         {mostrarAvanzado && (
-          <div className="grid gap-2">
+          <div id="campos-opcionales-gasto" className="grid gap-3 rounded-xl border border-slate-200 bg-[var(--surface-2)] p-3">
             <label className="text-sm font-medium">
               Descripción{etiquetaIA('descripcion')}
               <input value={formulario.descripcion} onChange={(e) => editarCampo('descripcion', { descripcion: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" />
