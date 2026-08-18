@@ -10,30 +10,82 @@ import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
 import { DatosComprobanteSugeridos, extraerDatosComprobante } from '@/lib/ia/extraer-comprobante';
-import {
-  calcularPeriodoResumenYVencimiento,
-  calcularPeriodoTarjeta,
-  formatearPeriodoDesdeFecha,
-  CalendarioTarjeta,
-  sumarMesesPeriodo,
-} from '@/utils/tarjetas';
+import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, formatearPeriodoDesdeFecha, CalendarioTarjeta, sumarMesesPeriodo } from '@/utils/tarjetas';
 import { obtenerOCrearCalendarioEstimado } from '@/lib/calendario-tarjetas';
 
-type MedioPago = { id: string; nombre: string; tipo: string; activo: boolean; orden: number | null };
-type Categoria = { id: string; nombre: string; icono: string | null; color: string | null; activo: boolean; orden: number | null };
-type Persona = { id: string; nombre: string; apellido: string | null; activo: boolean };
-type CuentaTarjeta = { id: string; nombre_cuenta: string; banco: string | null; marca: string | null; dia_cierre_habitual: number | null; dias_hasta_vencimiento: number | null; activo: boolean };
-type TarjetaFisica = { id: string; cuenta_tarjeta_id: string; persona_id: string; alias: string | null; tipo: string; ultimos_4_digitos: string | null; activo: boolean };
-
-type Formulario = {
-  monto: string; moneda: string; medio_pago_id: string; cuenta_tarjeta_id: string; tarjeta_fisica_id: string; fecha_gasto: string;
-  establecimiento: string; categoria_id: string; persona_id: string; cantidad_cuotas: number; descripcion: string; observaciones: string;
+type MedioPago = {
+  id: string;
+  nombre: string;
+  tipo: string;
+  activo: boolean;
+  orden: number | null;
+};
+type Categoria = {
+  id: string;
+  nombre: string;
+  icono: string | null;
+  color: string | null;
+  activo: boolean;
+  orden: number | null;
+};
+type Persona = {
+  id: string;
+  nombre: string;
+  apellido: string | null;
+  activo: boolean;
+};
+type CuentaTarjeta = {
+  id: string;
+  nombre_cuenta: string;
+  banco: string | null;
+  marca: string | null;
+  dia_cierre_habitual: number | null;
+  dias_hasta_vencimiento: number | null;
+  activo: boolean;
+};
+type TarjetaFisica = {
+  id: string;
+  cuenta_tarjeta_id: string;
+  persona_id: string;
+  alias: string | null;
+  tipo: string;
+  ultimos_4_digitos: string | null;
+  activo: boolean;
 };
 
-const HOY = new Date().toISOString().slice(0, 10);
-const inicial: Formulario = { monto: '', moneda: 'ARS', medio_pago_id: '', cuenta_tarjeta_id: '', tarjeta_fisica_id: '', fecha_gasto: HOY, establecimiento: '', categoria_id: '', persona_id: '', cantidad_cuotas: 1, descripcion: '', observaciones: '' };
-const MENSAJE_CATEGORIA_GENERICA = 'La categoría sugerida puede ser genérica. Revisala antes de guardar.';
+type Formulario = {
+  monto: string;
+  moneda: string;
+  medio_pago_id: string;
+  cuenta_tarjeta_id: string;
+  tarjeta_fisica_id: string;
+  fecha_gasto: string;
+  establecimiento: string;
+  categoria_id: string;
+  persona_id: string;
+  cantidad_cuotas: number;
+  descripcion: string;
+  observaciones: string;
+};
 
+type CampoDetectadoIA = keyof Pick<Formulario, 'monto' | 'moneda' | 'fecha_gasto' | 'establecimiento' | 'categoria_id' | 'medio_pago_id' | 'descripcion' | 'observaciones'>;
+
+const HOY = new Date().toISOString().slice(0, 10);
+const inicial: Formulario = {
+  monto: '',
+  moneda: 'ARS',
+  medio_pago_id: '',
+  cuenta_tarjeta_id: '',
+  tarjeta_fisica_id: '',
+  fecha_gasto: HOY,
+  establecimiento: '',
+  categoria_id: '',
+  persona_id: '',
+  cantidad_cuotas: 1,
+  descripcion: '',
+  observaciones: '',
+};
+const MENSAJE_CATEGORIA_GENERICA = 'La categoría sugerida puede ser genérica. Revisala antes de guardar.';
 
 function esCandidatoEmisor(tipo: string | undefined) {
   if (!tipo) return false;
@@ -63,7 +115,12 @@ function crearNombreComprobantePegado() {
 }
 
 function normalizarNombreCategoria(nombre: string) {
-  return nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  return nombre
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export default function Page() {
@@ -98,6 +155,7 @@ export default function Page() {
   const inputCamaraRef = useRef<HTMLInputElement | null>(null);
   const [previewComprobanteUrl, setPreviewComprobanteUrl] = useState<string | null>(null);
   const [establecimientoSeleccionadoIA, setEstablecimientoSeleccionadoIA] = useState<string>('');
+  const [camposDetectadosIA, setCamposDetectadosIA] = useState<Set<CampoDetectadoIA>>(new Set());
 
   const medioSeleccionado = useMemo(() => medios.find((medio) => medio.id === formulario.medio_pago_id), [medios, formulario.medio_pago_id]);
   const categoriaFormulario = useMemo(() => categorias.find((categoria) => categoria.id === formulario.categoria_id), [categorias, formulario.categoria_id]);
@@ -105,11 +163,26 @@ export default function Page() {
   const esTarjetaCredito = medioSeleccionado?.tipo === 'tarjeta_credito';
   const tarjetasCuenta = useMemo(() => tarjetas.filter((t) => t.cuenta_tarjeta_id === formulario.cuenta_tarjeta_id), [tarjetas, formulario.cuenta_tarjeta_id]);
 
-  useEffect(() => { (async () => { const perfil = await obtenerPerfilActivo(); setGrupoId(perfil.grupo_id); const { data: authData } = await supabase.auth.getUser(); setUsuarioEmail(authData.user?.email ?? null); })(); }, []);
-  useEffect(() => { if (!grupoId) return; void cargarDatos(); }, [grupoId]);
+  useEffect(() => {
+    (async () => {
+      const perfil = await obtenerPerfilActivo();
+      setGrupoId(perfil.grupo_id);
+      const { data: authData } = await supabase.auth.getUser();
+      setUsuarioEmail(authData.user?.email ?? null);
+    })();
+  }, []);
+  useEffect(() => {
+    if (!grupoId) return;
+    void cargarDatos();
+  }, [grupoId]);
   useEffect(() => {
     if (!esTarjetaCredito) {
-      setFormulario((prev) => ({ ...prev, cuenta_tarjeta_id: '', tarjeta_fisica_id: '', cantidad_cuotas: 1 }));
+      setFormulario((prev) => ({
+        ...prev,
+        cuenta_tarjeta_id: '',
+        tarjeta_fisica_id: '',
+        cantidad_cuotas: 1,
+      }));
     }
   }, [esTarjetaCredito]);
   useEffect(() => {
@@ -121,8 +194,6 @@ export default function Page() {
     setPreviewComprobanteUrl(null);
     return undefined;
   }, [comprobante]);
-
-
 
   useEffect(() => {
     const tokenCompartido = searchParams.get('shared_token');
@@ -138,7 +209,9 @@ export default function Page() {
         const blob = await respuesta.blob();
         const nombreHeader = respuesta.headers.get('X-Shared-Filename');
         const nombre = nombreHeader ? decodeURIComponent(nombreHeader) : 'comprobante-compartido';
-        const archivoCompartido = new File([blob], nombre, { type: blob.type || 'application/octet-stream' });
+        const archivoCompartido = new File([blob], nombre, {
+          type: blob.type || 'application/octet-stream',
+        });
         await seleccionarComprobante(archivoCompartido, 'Comprobante compartido precargado. Revisá y confirmá antes de guardar.');
       } catch {
         setMensajeComprobante('No se pudo recuperar el comprobante compartido. Podés subirlo manualmente.');
@@ -160,21 +233,38 @@ export default function Page() {
 
   async function cargarDatos() {
     if (!grupoId) return;
-    const [m, c, p, ct, tf, cal] = await Promise.all([
-      supabase.from('medios_pago').select('id,nombre,tipo,activo,orden').eq('activo', true).eq('grupo_id', grupoId).order('orden'),
-      supabase.from('categorias').select('id,nombre,icono,color,activo,orden').eq('activo', true).eq('grupo_id', grupoId).order('orden'),
-      supabase.from('personas').select('id,nombre,apellido,activo').eq('activo', true).eq('grupo_id', grupoId).order('nombre'),
-      supabase.from('cuentas_tarjeta').select('id,nombre_cuenta,banco,marca,dia_cierre_habitual,dias_hasta_vencimiento,activo').eq('activo', true).eq('grupo_id', grupoId).order('nombre_cuenta'),
-      supabase.from('tarjetas_fisicas').select('id,cuenta_tarjeta_id,persona_id,alias,tipo,ultimos_4_digitos,activo').eq('activo', true).eq('grupo_id', grupoId),
-      supabase.from('calendario_tarjetas').select('id,cuenta_tarjeta_id,periodo_resumen,fecha_cierre,fecha_vencimiento,estado_calendario,origen_fecha,observaciones').eq('grupo_id', grupoId),
-    ]);
-    if ([m,c,p,ct,tf,cal].some((r) => r.error)) return setError('No se pudieron cargar los datos iniciales.');
-    setMedios(m.data ?? []); setCategorias(c.data ?? []); setPersonas(p.data ?? []); setCuentas(ct.data ?? []); setTarjetas(tf.data ?? []); setCalendarios((cal.data ?? []) as CalendarioTarjeta[]);
-    if (process.env.NODE_ENV !== 'production') console.debug('[debug] /gastos/nuevo', { pantalla: '/gastos/nuevo', email: usuarioEmail, grupo_id: grupoId, registros: { medios: (m.data ?? []).length, categorias: (c.data ?? []).length, personas: (p.data ?? []).length, cuentas: (ct.data ?? []).length, tarjetas: (tf.data ?? []).length, calendarios: (cal.data ?? []).length } });
+    const [m, c, p, ct, tf, cal] = await Promise.all([supabase.from('medios_pago').select('id,nombre,tipo,activo,orden').eq('activo', true).eq('grupo_id', grupoId).order('orden'), supabase.from('categorias').select('id,nombre,icono,color,activo,orden').eq('activo', true).eq('grupo_id', grupoId).order('orden'), supabase.from('personas').select('id,nombre,apellido,activo').eq('activo', true).eq('grupo_id', grupoId).order('nombre'), supabase.from('cuentas_tarjeta').select('id,nombre_cuenta,banco,marca,dia_cierre_habitual,dias_hasta_vencimiento,activo').eq('activo', true).eq('grupo_id', grupoId).order('nombre_cuenta'), supabase.from('tarjetas_fisicas').select('id,cuenta_tarjeta_id,persona_id,alias,tipo,ultimos_4_digitos,activo').eq('activo', true).eq('grupo_id', grupoId), supabase.from('calendario_tarjetas').select('id,cuenta_tarjeta_id,periodo_resumen,fecha_cierre,fecha_vencimiento,estado_calendario,origen_fecha,observaciones').eq('grupo_id', grupoId)]);
+    if ([m, c, p, ct, tf, cal].some((r) => r.error)) return setError('No se pudieron cargar los datos iniciales.');
+    setMedios(m.data ?? []);
+    setCategorias(c.data ?? []);
+    setPersonas(p.data ?? []);
+    setCuentas(ct.data ?? []);
+    setTarjetas(tf.data ?? []);
+    setCalendarios((cal.data ?? []) as CalendarioTarjeta[]);
+    if (process.env.NODE_ENV !== 'production')
+      console.debug('[debug] /gastos/nuevo', {
+        pantalla: '/gastos/nuevo',
+        email: usuarioEmail,
+        grupo_id: grupoId,
+        registros: {
+          medios: (m.data ?? []).length,
+          categorias: (c.data ?? []).length,
+          personas: (p.data ?? []).length,
+          cuentas: (ct.data ?? []).length,
+          tarjetas: (tf.data ?? []).length,
+          calendarios: (cal.data ?? []).length,
+        },
+      });
   }
 
   async function asegurarCalendario(cuenta: CuentaTarjeta, periodo: string) {
-    const resultado = await obtenerOCrearCalendarioEstimado({ supabase, cuenta, periodo, contexto: 'gasto', grupoId });
+    const resultado = await obtenerOCrearCalendarioEstimado({
+      supabase,
+      cuenta,
+      periodo,
+      contexto: 'gasto',
+      grupoId,
+    });
     const calendario = resultado.calendario as CalendarioTarjeta;
     setCalendarios((prev) => {
       const sinMismoPeriodo = prev.filter((cal) => !(cal.cuenta_tarjeta_id === cuenta.id && cal.periodo_resumen === periodo));
@@ -183,12 +273,12 @@ export default function Page() {
     return { calendario, generado: resultado.generado };
   }
 
-
   function limpiarComprobanteSeleccionado() {
     setComprobante(null);
     setSugerenciasIA(null);
     setEstablecimientoSeleccionadoIA('');
     setMensajeComprobante(null);
+    setCamposDetectadosIA(new Set());
   }
 
   async function seleccionarComprobante(archivo: File | null, mensajeExito?: string) {
@@ -196,6 +286,7 @@ export default function Page() {
     setComprobante(null);
     setSugerenciasIA(null);
     setEstablecimientoSeleccionadoIA('');
+    setCamposDetectadosIA(new Set());
     if (archivo.type.startsWith('image/')) setMensajeComprobante('Optimizando imagen...');
     const resultado = await comprimirImagenComprobante(archivo);
     const archivoPreparado = resultado.archivo;
@@ -206,9 +297,7 @@ export default function Page() {
       return false;
     }
     setComprobante(archivoPreparado);
-    setMensajeComprobante(resultado.comprimido
-      ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.`
-      : mensajeExito ?? null);
+    setMensajeComprobante(resultado.comprimido ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.` : (mensajeExito ?? null));
     setError(null);
     return true;
   }
@@ -221,42 +310,71 @@ export default function Page() {
     try {
       const sugerencias = await extraerDatosComprobante({
         file: comprobante,
-        categorias: categorias.map((categoria) => ({ id: categoria.id, nombre: categoria.nombre })),
-        mediosPago: medios.map((medio) => ({ id: medio.id, nombre: medio.nombre, tipo: medio.tipo })),
+        categorias: categorias.map((categoria) => ({
+          id: categoria.id,
+          nombre: categoria.nombre,
+        })),
+        mediosPago: medios.map((medio) => ({
+          id: medio.id,
+          nombre: medio.nombre,
+          tipo: medio.tipo,
+        })),
       });
       setSugerenciasIA(sugerencias);
       setEstablecimientoSeleccionadoIA(elegirEstablecimientoPorCandidatos(sugerencias) ?? '');
       setAccionCategoriaSugerida(null);
+      aplicarSugerenciasIA(sugerencias);
     } catch (error) {
       console.error('Error analizando comprobante en /gastos/nuevo:', error);
-      const mensaje = error instanceof Error
-        ? error.message
-        : 'No se pudo analizar el comprobante. Podés cargar el gasto manualmente.';
+      const mensaje = error instanceof Error ? error.message : 'No se pudo analizar el comprobante. Podés cargar el gasto manualmente.';
       setError(mensaje || 'No se pudo analizar el comprobante. Podés cargar el gasto manualmente.');
     } finally {
       setAnalizandoComprobante(false);
     }
   }
 
-  function aplicarSugerenciasIA() {
-    if (!sugerenciasIA) return;
+  function aplicarSugerenciasIA(sugerencias: DatosComprobanteSugeridos | null = sugerenciasIA) {
+    if (!sugerencias) return;
+    const establecimientoSugerido = elegirEstablecimientoPorCandidatos(sugerencias) || sugerencias.establecimiento;
     setFormulario((prev) => ({
       ...prev,
-      monto: sugerenciasIA.monto !== undefined ? String(sugerenciasIA.monto) : prev.monto,
-      moneda: sugerenciasIA.moneda ?? prev.moneda,
-      fecha_gasto: sugerenciasIA.fecha_gasto ?? prev.fecha_gasto,
-      establecimiento: (establecimientoSeleccionadoIA || elegirEstablecimientoPorCandidatos(sugerenciasIA) || sugerenciasIA.establecimiento)?.trim()
-        ? (establecimientoSeleccionadoIA || elegirEstablecimientoPorCandidatos(sugerenciasIA) || sugerenciasIA.establecimiento) as string
-        : prev.establecimiento,
-      categoria_id: sugerenciasIA.categoria_id ?? prev.categoria_id,
-      medio_pago_id: sugerenciasIA.medio_pago_id ?? prev.medio_pago_id,
-      descripcion: sugerenciasIA.descripcion ?? prev.descripcion,
-      observaciones: sugerenciasIA.observaciones ?? prev.observaciones,
+      monto: sugerencias.monto != null ? String(sugerencias.monto) : prev.monto,
+      moneda: sugerencias.moneda ?? prev.moneda,
+      fecha_gasto: sugerencias.fecha_gasto || prev.fecha_gasto,
+      establecimiento: (establecimientoSeleccionadoIA || establecimientoSugerido)?.trim() ? ((establecimientoSeleccionadoIA || establecimientoSugerido) as string) : prev.establecimiento,
+      categoria_id: sugerencias.categoria_id ?? prev.categoria_id,
+      medio_pago_id: sugerencias.medio_pago_id ?? prev.medio_pago_id,
+      descripcion: sugerencias.descripcion ?? prev.descripcion,
+      observaciones: sugerencias.observaciones ?? prev.observaciones,
     }));
-    const candidatos = sugerenciasIA.establecimiento_candidatos ?? [];
+    const detectados = new Set<CampoDetectadoIA>();
+    if (sugerencias.monto != null) detectados.add('monto');
+    if (sugerencias.moneda) detectados.add('moneda');
+    if (sugerencias.fecha_gasto) detectados.add('fecha_gasto');
+    if (establecimientoSugerido) detectados.add('establecimiento');
+    if (sugerencias.categoria_id) detectados.add('categoria_id');
+    if (sugerencias.medio_pago_id) detectados.add('medio_pago_id');
+    if (sugerencias.descripcion) detectados.add('descripcion');
+    if (sugerencias.observaciones) detectados.add('observaciones');
+    setCamposDetectadosIA(detectados);
+    if (sugerencias.descripcion || sugerencias.observaciones) setMostrarAvanzado(true);
+    const candidatos = sugerencias.establecimiento_candidatos ?? [];
     const hayMultiples = candidatos.length > 1;
     const mensajeRevision = hayMultiples ? ' Revisá el establecimiento sugerido. La factura contiene más de un nombre.' : '';
-    setMensajeComprobante(`Sugerencias aplicadas. Revisá los datos antes de guardar.${mensajeRevision}`.trim());
+    setMensajeComprobante(`Datos completados por IA. Revisalos y corregí lo necesario antes de guardar.${mensajeRevision}`.trim());
+  }
+
+  function editarCampo(campo: CampoDetectadoIA, cambios: Partial<Formulario>) {
+    setFormulario((prev) => ({ ...prev, ...cambios }));
+    setCamposDetectadosIA((prev) => {
+      const siguientes = new Set(prev);
+      siguientes.delete(campo);
+      return siguientes;
+    });
+  }
+
+  function etiquetaIA(campo: CampoDetectadoIA) {
+    return camposDetectadosIA.has(campo) ? <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">Completado por IA</span> : null;
   }
 
   async function crearYSeleccionarCategoria() {
@@ -275,7 +393,15 @@ export default function Page() {
     const existente = categorias.find((categoria) => normalizarNombreCategoria(categoria.nombre) === normalizarNombreCategoria(nombreSugerido));
     if (existente) {
       setFormulario((prev) => ({ ...prev, categoria_id: existente.id }));
-      setSugerenciasIA((prev) => (prev ? { ...prev, categoria_id: existente.id, categoria_no_aplicada: undefined } : prev));
+      setSugerenciasIA((prev) =>
+        prev
+          ? {
+              ...prev,
+              categoria_id: existente.id,
+              categoria_no_aplicada: undefined,
+            }
+          : prev,
+      );
       setModalCategoriaAbierto(false);
       setAccionCategoriaSugerida('crear');
       setMensajeComprobante('Ya existía una categoría similar. Se seleccionó automáticamente.');
@@ -285,7 +411,14 @@ export default function Page() {
     const ordenMaximo = categorias.reduce((maximo, categoria) => Math.max(maximo, categoria.orden ?? 0), 0);
     const { data, error: errorInsert } = await supabase
       .from('categorias')
-      .insert({ nombre: nombreSugerido, activo: true, orden: ordenMaximo + 1, icono: nuevaCategoriaIcono.trim() || null, color: nuevaCategoriaColor.trim() || null, grupo_id: grupoId })
+      .insert({
+        nombre: nombreSugerido,
+        activo: true,
+        orden: ordenMaximo + 1,
+        icono: nuevaCategoriaIcono.trim() || null,
+        color: nuevaCategoriaColor.trim() || null,
+        grupo_id: grupoId,
+      })
       .select('id,nombre,icono,color,activo,orden')
       .single();
     if (errorInsert || !data) {
@@ -296,7 +429,15 @@ export default function Page() {
     const nuevaCategoria = data as Categoria;
     setCategorias((prev) => [...prev, nuevaCategoria]);
     setFormulario((prev) => ({ ...prev, categoria_id: nuevaCategoria.id }));
-    setSugerenciasIA((prev) => (prev ? { ...prev, categoria_id: nuevaCategoria.id, categoria_no_aplicada: undefined } : prev));
+    setSugerenciasIA((prev) =>
+      prev
+        ? {
+            ...prev,
+            categoria_id: nuevaCategoria.id,
+            categoria_no_aplicada: undefined,
+          }
+        : prev,
+    );
     setModalCategoriaAbierto(false);
     setAccionCategoriaSugerida('crear');
     setMensajeComprobante('Categoría creada y seleccionada.');
@@ -326,7 +467,9 @@ export default function Page() {
     event.preventDefault();
     const blob = item.getAsFile();
     if (!blob) return setMensajeComprobante('No se detectó una imagen en el portapapeles.');
-    const archivoPegado = new File([blob], crearNombreComprobantePegado(), { type: 'image/png' });
+    const archivoPegado = new File([blob], crearNombreComprobantePegado(), {
+      type: 'image/png',
+    });
     void seleccionarComprobante(archivoPegado);
   }
 
@@ -344,7 +487,9 @@ export default function Page() {
       }
       const tipoImagen = itemConImagen.types.find((tipo) => tipo.startsWith('image/')) ?? 'image/png';
       const blob = await itemConImagen.getType(tipoImagen);
-      const archivoPegado = new File([blob], crearNombreComprobantePegado(), { type: tipoImagen });
+      const archivoPegado = new File([blob], crearNombreComprobantePegado(), {
+        type: tipoImagen,
+      });
       void seleccionarComprobante(archivoPegado);
     } catch {
       setMensajeComprobante('No se pudo leer el portapapeles. Permití acceso o usá Ctrl+V / ⌘V.');
@@ -360,7 +505,10 @@ export default function Page() {
   async function guardar(event: FormEvent) {
     event.preventDefault();
     if (guardando) return;
-    setError(null); setErrorTecnico(null); setMensaje(null); setAdvertencia(null);
+    setError(null);
+    setErrorTecnico(null);
+    setMensaje(null);
+    setAdvertencia(null);
     if (!grupoId) return setError('No se pudo cargar el grupo activo.');
     const monto = Number(formulario.monto);
     if (!(monto > 0)) return setError('El monto debe ser mayor a 0.');
@@ -377,7 +525,14 @@ export default function Page() {
     setGuardando(true);
     let gastoCreadoId: string | null = null;
     try {
-      const payload = { ...formulario, monto, establecimiento: formulario.establecimiento.trim(), cuenta_tarjeta_id: esTarjetaCredito ? formulario.cuenta_tarjeta_id : null, tarjeta_fisica_id: esTarjetaCredito ? formulario.tarjeta_fisica_id : null, cantidad_cuotas: esTarjetaCredito ? formulario.cantidad_cuotas : 1 };
+      const payload = {
+        ...formulario,
+        monto,
+        establecimiento: formulario.establecimiento.trim(),
+        cuenta_tarjeta_id: esTarjetaCredito ? formulario.cuenta_tarjeta_id : null,
+        tarjeta_fisica_id: esTarjetaCredito ? formulario.tarjeta_fisica_id : null,
+        cantidad_cuotas: esTarjetaCredito ? formulario.cantidad_cuotas : 1,
+      };
       let cuotasPayload: Array<Record<string, unknown>> = [];
       let usaronEstimados = false;
       let falloAsociacionComprobante = false;
@@ -396,9 +551,21 @@ export default function Page() {
         });
         const calendarioBase = await asegurarCalendario(cuenta, calculoBase.periodo_resumen);
         usaronEstimados ||= calendarioBase.generado || calendarioBase.calendario.estado_calendario === 'estimado';
-        const resultado = calcularPeriodoTarjeta({ fecha_gasto: formulario.fecha_gasto, cuenta_tarjeta_id: cuenta.id, calendarios: [...calendarios, calendarioBase.calendario] });
+        const resultado = calcularPeriodoTarjeta({
+          fecha_gasto: formulario.fecha_gasto,
+          cuenta_tarjeta_id: cuenta.id,
+          calendarios: [...calendarios, calendarioBase.calendario],
+        });
         if (process.env.NODE_ENV !== 'production') {
-          console.log('[tarjeta][calculo]', { fecha_gasto: formulario.fecha_gasto, dia_cierre_habitual: cuenta.dia_cierre_habitual, dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento, periodo_resumen: resultado.periodo_resumen, fecha_cierre: resultado.fecha_cierre, fecha_vencimiento: resultado.fecha_vencimiento, periodo_pago_estimado: resultado.periodo_pago });
+          console.log('[tarjeta][calculo]', {
+            fecha_gasto: formulario.fecha_gasto,
+            dia_cierre_habitual: cuenta.dia_cierre_habitual,
+            dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento,
+            periodo_resumen: resultado.periodo_resumen,
+            fecha_cierre: resultado.fecha_cierre,
+            fecha_vencimiento: resultado.fecha_vencimiento,
+            periodo_pago_estimado: resultado.periodo_pago,
+          });
         }
 
         for (let i = 0; i < formulario.cantidad_cuotas; i += 1) {
@@ -424,7 +591,11 @@ export default function Page() {
         }
       }
 
-      const { data: gasto, error: eg } = await supabase.from('gastos').insert({ ...payload, grupo_id: grupoId }).select('id').single();
+      const { data: gasto, error: eg } = await supabase
+        .from('gastos')
+        .insert({ ...payload, grupo_id: grupoId })
+        .select('id')
+        .single();
       if (eg || !gasto) throw new Error('No se pudo guardar el gasto.');
       gastoCreadoId = gasto.id;
 
@@ -440,7 +611,10 @@ export default function Page() {
         });
 
         console.debug('[SpendWise][comprobante] storage path', rutaStorage);
-        const { error: errorStorage } = await supabase.storage.from(BUCKET_COMPROBANTES).upload(rutaStorage, comprobante, { upsert: false, contentType: comprobante.type || undefined });
+        const { error: errorStorage } = await supabase.storage.from(BUCKET_COMPROBANTES).upload(rutaStorage, comprobante, {
+          upsert: false,
+          contentType: comprobante.type || undefined,
+        });
         if (errorStorage) {
           console.error(errorStorage);
           throw new Error(MENSAJE_ERROR_BUCKET_COMPROBANTES);
@@ -470,14 +644,20 @@ export default function Page() {
             payload: payloadComprobante,
             raw: errorComprobante,
           });
-          setErrorTecnico({ ...detalle, raw: { error: errorComprobante, payload: payloadComprobante } });
+          setErrorTecnico({
+            ...detalle,
+            raw: { error: errorComprobante, payload: payloadComprobante },
+          });
           console.warn('El archivo ya fue subido a Storage pero falló el insert de metadata.', { bucket: BUCKET_COMPROBANTES, ruta_storage: rutaStorage });
           falloAsociacionComprobante = true;
         }
       }
 
       if (esTarjetaCredito && cuotasPayload.length > 0) {
-        const cuotasConGasto = cuotasPayload.map((cuota) => ({ ...cuota, gasto_id: gasto.id }));
+        const cuotasConGasto = cuotasPayload.map((cuota) => ({
+          ...cuota,
+          gasto_id: gasto.id,
+        }));
         const { error: ec } = await supabase.from('cuotas_tarjeta').insert(cuotasConGasto.map((item) => ({ ...item, grupo_id: grupoId })));
         if (ec) {
           if (rutaStorageSubida) console.warn('No se elimina el comprobante subido porque esta tarea no borra archivos de Storage.', { bucket: BUCKET_COMPROBANTES, ruta_storage: rutaStorageSubida });
@@ -499,23 +679,445 @@ export default function Page() {
       if (gastoCreadoId) {
         await supabase
           .from('gastos')
-          .update({ estado_registro: 'anulado', observaciones: 'Anulado automáticamente por error al generar compromiso de tarjeta.' })
+          .update({
+            estado_registro: 'anulado',
+            observaciones: 'Anulado automáticamente por error al generar compromiso de tarjeta.',
+          })
           .eq('id', gastoCreadoId);
       }
       setError(e instanceof Error ? e.message : 'Ocurrió un error al guardar el gasto.');
-    } finally { setGuardando(false); }
+    } finally {
+      setGuardando(false);
+    }
   }
 
-  return <section className="mx-auto max-w-4xl space-y-4"><FeedbackToast tipo={error ? 'error' : mensaje ? 'ok' : advertencia ? 'warning' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensaje ?? advertencia ?? mensajeComprobante} /><h1 className="text-2xl font-semibold">Nuevo gasto</h1>{error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>}<ErrorTecnicoDesarrollo error={errorTecnico} />{mensaje && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{mensaje}</p>}{advertencia && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">{advertencia}</p>}<form onSubmit={guardar} className="sf-card space-y-4 p-4 sm:p-5"><div><label className="text-sm font-medium">Monto *</label><input value={formulario.monto} onChange={(e) => setFormulario((p) => ({ ...p, monto: e.target.value }))} inputMode="decimal" className="mt-1 w-full rounded-xl border px-4 py-3 text-2xl font-semibold" placeholder="0,00" /></div><div className="grid grid-cols-2 gap-2"><input value={formulario.moneda} onChange={(e) => setFormulario((p) => ({ ...p, moneda: e.target.value }))} className="rounded-xl border px-3 py-2" /><input type="date" value={formulario.fecha_gasto} onChange={(e) => setFormulario((p) => ({ ...p, fecha_gasto: e.target.value }))} className="rounded-xl border px-3 py-2" /></div><div><p className="mb-2 text-sm font-medium">Medio de pago *</p><div className="grid grid-cols-2 gap-2">{medios.map((medio) => <button key={medio.id} type="button" onClick={() => setFormulario((p) => ({ ...p, medio_pago_id: medio.id }))} className={`sf-chip ${formulario.medio_pago_id === medio.id ? 'is-selected' : ''}`}>{medio.nombre}</button>)}</div></div>
-<div><label className="text-sm font-medium">Establecimiento *</label><input value={formulario.establecimiento} onChange={(e) => setFormulario((p) => ({ ...p, establecimiento: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2" /></div>
-<div id="seccion-categorias"><div className="mb-2 flex items-center justify-between gap-2"><p className="text-sm font-medium">Categoría *</p><button type="button" onClick={() => abrirModalCrearCategoria()} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">+ Nueva categoría</button></div><div className="grid grid-cols-2 gap-2">{categorias.map((cat) => <button key={cat.id} type="button" onClick={() => setFormulario((p) => ({ ...p, categoria_id: cat.id }))} className={`sf-chip ${formulario.categoria_id === cat.id ? 'is-selected' : ''}`}>{cat.icono ? `${cat.icono} ` : ''}{cat.nombre}</button>)}</div></div>
-{esTarjetaCredito && <><div><p className="mb-2 text-sm font-medium">Cuenta de tarjeta *</p><div className="space-y-2">{cuentas.map((cuenta) => <button key={cuenta.id} type="button" onClick={() => setFormulario((p) => ({ ...p, cuenta_tarjeta_id: cuenta.id, tarjeta_fisica_id: '' }))} className={`w-full rounded-xl border p-3 text-left ${formulario.cuenta_tarjeta_id === cuenta.id ? 'border-emerald-500 bg-emerald-50' : ''}`}><p className="font-medium">{cuenta.nombre_cuenta}</p><p className="text-xs text-slate-500">{cuenta.banco ?? ''} {cuenta.marca ?? ''}</p></button>)}</div></div>
-<div><p className="mb-2 text-sm font-medium">Tarjeta física *</p><div className="space-y-2">{tarjetasCuenta.map((tarjeta) => <button key={tarjeta.id} type="button" onClick={() => setFormulario((p) => ({ ...p, tarjeta_fisica_id: tarjeta.id, persona_id: tarjeta.persona_id }))} className={`w-full rounded-xl border p-3 text-left ${formulario.tarjeta_fisica_id === tarjeta.id ? 'border-emerald-500 bg-emerald-50' : ''}`}>{tarjeta.alias ?? tarjeta.tipo} {tarjeta.ultimos_4_digitos ? `• ${tarjeta.ultimos_4_digitos}` : ''}</button>)}</div></div>
-<div><label className="text-sm font-medium">Cantidad de cuotas *</label><input type="number" min={1} value={formulario.cantidad_cuotas} onChange={(e) => setFormulario((p) => ({ ...p, cantidad_cuotas: Number(e.target.value) || 1 }))} className="mt-1 w-full rounded-xl border px-3 py-2" /></div></>}
-<div className="rounded-xl border border-slate-200 p-3"><p className="text-sm font-medium">Comprobante</p><p className="text-xs text-slate-600">Opcional: adjuntá una foto, imagen o PDF del ticket/factura.</p><p className="mt-1 text-xs text-slate-500">¿Recibiste el comprobante por WhatsApp? En iPhone, guardá la imagen en Fotos o Archivos y después subila desde SpendFlow Planner.</p><details className="mt-2 rounded-lg border border-slate-200 bg-[var(--surface-2)] p-2 text-xs text-slate-700"><summary className="cursor-pointer font-medium">Cómo cargar desde WhatsApp en iPhone</summary><ol className="mt-2 list-decimal space-y-1 pl-4"><li>Abrí la imagen o comprobante en WhatsApp.</li><li>Tocá Compartir o Guardar.</li><li>Guardalo en Fotos o Archivos.</li><li>Volvé a SpendFlow Planner.</li><li>Tocá “Elegir de galería” o “Subir archivo”.</li><li>Luego presioná “Analizar comprobante”.</li></ol></details><p className="mt-2 text-[11px] text-slate-500">Compartir directamente desde WhatsApp puede no estar disponible en iPhone. Usá Fotos o Archivos como alternativa.</p><div tabIndex={0} onPaste={manejarPegadoComprobante} onDragOver={(event) => { event.preventDefault(); setArrastrandoComprobante(true); }} onDragLeave={() => setArrastrandoComprobante(false)} onDrop={manejarDropComprobante} className={`mt-2 rounded-xl border border-dashed p-3 ${arrastrandoComprobante ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-[var(--surface-2)]'}`}><p className="text-xs text-slate-600">Arrastrá una imagen/PDF acá o pegá una imagen copiada.</p><div className="mt-3 grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => inputCamaraRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">Tomar foto</button><button type="button" onClick={() => inputSubirRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">Elegir de galería</button><button type="button" onClick={() => inputSubirRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">Subir archivo</button></div><button type="button" onClick={() => void pegarComprobanteDesdeBoton()} className="mt-2 w-full rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">Pegar imagen</button><input ref={inputCamaraRef} type="file" accept="image/*,.jpg,.jpeg,.png,.webp" capture="environment" className="hidden" onChange={manejarCambioArchivo} /><input ref={inputSubirRef} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" className="hidden" onChange={manejarCambioArchivo} /></div>{mensajeComprobante ? <p className="mt-2 text-xs text-slate-500">{mensajeComprobante}</p> : null}{comprobante ? <div className="mt-3 rounded-xl border border-slate-200 bg-[var(--surface-2)] p-3 text-xs">{comprobante.type === 'application/pdf' ? <p className="rounded-lg border border-slate-300 bg-[var(--surface)] px-3 py-2 text-slate-700">📄 PDF seleccionado</p> : null}{previewComprobanteUrl && comprobante.type.startsWith('image/') ? <img src={previewComprobanteUrl} alt="Vista previa del comprobante" className="mb-2 max-h-44 w-auto rounded-lg border border-slate-200 object-contain" /> : null}<p className="truncate"><span className="font-medium">Archivo:</span> {comprobante.name}</p><p><span className="font-medium">Tipo:</span> {comprobante.type || 'Sin tipo'}</p><p><span className="font-medium">Tamaño:</span> {formatearTamanoArchivo(comprobante.size)}</p><div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={() => void analizarComprobante()} disabled={analizandoComprobante} className="rounded border border-emerald-600 px-3 py-2 text-emerald-700 disabled:opacity-60">{analizandoComprobante ? (comprobante.type === 'application/pdf' ? 'Analizando PDF…' : 'Analizando comprobante…') : 'Analizar comprobante'}</button><button type="button" onClick={() => inputSubirRef.current?.click()} className="rounded border px-3 py-2">Cambiar comprobante</button><button type="button" onClick={limpiarComprobanteSeleccionado} className="rounded border px-3 py-2">Quitar comprobante</button></div></div> : <p className="mt-2 text-xs text-slate-500">Sin comprobante seleccionado.</p>}{sugerenciasIA ? <div className="mt-3 rounded-xl border border-slate-200 bg-[var(--surface-2)] p-3 text-xs"><p className="font-semibold text-sm">Datos sugeridos por IA</p><p className="mt-1 text-amber-700">Revisá los datos antes de guardar. La lectura automática puede tener errores.</p><ul className="mt-2 space-y-1 text-slate-700"><li><span className="font-medium">Datos leídos - Fecha:</span> {sugerenciasIA.fecha_gasto ?? 'Sin sugerencia'}</li><li><span className="font-medium">Datos leídos - Establecimiento:</span> {sugerenciasIA.establecimiento ?? 'Sin sugerencia'}</li><li><span className="font-medium">Datos leídos - Monto:</span> {sugerenciasIA.monto ?? 'Sin sugerencia'}</li><li><span className="font-medium">Datos leídos - Moneda:</span> {sugerenciasIA.moneda ?? 'Sin sugerencia'}</li><li><span className="font-medium">Categoría sugerida por IA:</span> {sugerenciasIA.categoria_sugerida ?? 'Sin sugerencia'} <span className="ml-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">sugerido por IA</span></li><li><span className="font-medium">Categoría aplicada:</span> {categoriaFormulario?.nombre ?? categoriaSugeridaAplicada?.nombre ?? 'No aplicada'} <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">aplicado</span></li><li><span className="font-medium">Medio de pago sugerido por IA:</span> {sugerenciasIA.medio_pago_sugerido ?? 'Sin sugerencia'}</li><li><span className="font-medium">Medio de pago aplicado:</span> {sugerenciasIA.medio_pago_id ? (medios.find((medio) => medio.id === sugerenciasIA.medio_pago_id)?.nombre ?? 'Sin coincidencia') : 'No aplicado'}</li><li><span className="font-medium">Confianza:</span> {sugerenciasIA.confianza ? `${Math.round(sugerenciasIA.confianza * 100)}%` : 'Sin dato'}</li><li><span className="font-medium">CUIT/RUC/NIT:</span> {sugerenciasIA.identificador_fiscal ?? 'Sin sugerencia'}</li><li><span className="font-medium">Observaciones:</span> {sugerenciasIA.observaciones ?? 'Sin observaciones'}</li></ul>{sugerenciasIA.categoria_mapeo_detalle ? <p className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700"><span className="font-medium">Motivo:</span> {sugerenciasIA.categoria_mapeo_detalle}</p> : <p className="mt-2 rounded border border-slate-200 bg-[var(--surface)] px-2 py-1 text-slate-600">Si no corresponde, podés elegir otra categoría o crear una nueva.</p>}{sugerenciasIA.categoria_generica ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{MENSAJE_CATEGORIA_GENERICA}</p> : null}{sugerenciasIA.recomendacion_categoria_impuestos ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{sugerenciasIA.recomendacion_categoria_impuestos}</p> : null}{sugerenciasIA.categoria_requiere_revision ? <div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => document.getElementById('seccion-categorias')?.scrollIntoView({ behavior: 'smooth' })} className="rounded-lg border border-amber-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-amber-800">Cambiar categoría</button><button type="button" onClick={() => abrirModalCrearCategoria(sugerenciasIA.categoria_no_aplicada ?? sugerenciasIA.categoria_sugerida ?? '')} className="rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">+ Nueva categoría</button></div> : null}{sugerenciasIA.medio_pago_mapeo_detalle ? <p className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">{sugerenciasIA.medio_pago_mapeo_detalle}</p> : null}{sugerenciasIA.categoria_no_aplicada ? <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800"><p className="text-sm font-semibold">La IA sugirió una categoría que no existe: {sugerenciasIA.categoria_no_aplicada}.</p><p className="text-xs">Podés crearla ahora o elegir una categoría existente.</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => { setAccionCategoriaSugerida('existente'); document.getElementById('seccion-categorias')?.scrollIntoView({ behavior: 'smooth' }); }} className="rounded-lg border border-amber-500 bg-[var(--surface)] px-3 py-2 text-xs font-medium">Usar categoría existente</button><button type="button" onClick={() => { setAccionCategoriaSugerida('crear'); abrirModalCrearCategoria(sugerenciasIA.categoria_no_aplicada ?? ''); }} className="rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">Crear categoría {sugerenciasIA.categoria_no_aplicada}</button><button type="button" onClick={() => { setAccionCategoriaSugerida('ignorar'); setSugerenciasIA((prev) => (prev ? { ...prev, categoria_no_aplicada: undefined } : prev)); }} className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-medium">Ignorar sugerencia</button></div>{accionCategoriaSugerida === 'existente' ? <p className="mt-2 text-xs text-amber-700">Seleccioná manualmente una categoría existente.</p> : null}</div> : null}{sugerenciasIA.medio_pago_no_aplicado ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">La IA sugirió un medio de pago sin coincidencia clara: {sugerenciasIA.medio_pago_no_aplicado}. Elegí uno manualmente.</p> : null}{(sugerenciasIA.emisor_factura || sugerenciasIA.receptor_factura) ? <div className="mt-2 rounded border border-slate-200 bg-[var(--surface)] px-2 py-2 text-slate-700"><p><span className="font-medium">Emisor detectado:</span> {sugerenciasIA.emisor_factura || 'Sin dato'}</p><p><span className="font-medium">Receptor detectado:</span> {sugerenciasIA.receptor_factura || 'Sin dato'}</p></div> : null}{(sugerenciasIA.establecimiento_candidatos?.length ?? 0) > 1 ? <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-amber-800">Se detectaron varios nombres en el comprobante. Elegí cuál corresponde al establecimiento.</p><div className="mt-2 space-y-2">{(sugerenciasIA.establecimiento_candidatos ?? []).map((candidato) => <label key={`${candidato.nombre}-${candidato.tipo}`} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-[var(--surface)] px-2 py-2"><input type="radio" name="establecimiento-candidato" checked={establecimientoSeleccionadoIA === candidato.nombre} onChange={() => { setEstablecimientoSeleccionadoIA(candidato.nombre); setFormulario((prev) => ({ ...prev, establecimiento: candidato.nombre })); }} /><span className="text-xs">{candidato.nombre} · {esCandidatoEmisor(candidato.tipo) ? 'Emisor / proveedor' : (['receptor', 'cliente', 'comprador', 'consumidor', 'facturado_a', 'destinatario'].includes(candidato.tipo) ? 'Receptor / cliente' : 'Otro posible nombre')}</span></label>)}</div></div> : null}{sugerenciasIA.advertencias?.length ? <ul className="mt-2 list-disc pl-5 text-amber-700">{sugerenciasIA.advertencias.map((advertenciaItem) => <li key={advertenciaItem}>{advertenciaItem}</li>)}</ul> : null}<div className="mt-3 flex flex-wrap gap-2"><button type="button" onClick={aplicarSugerenciasIA} className="rounded border border-emerald-600 bg-emerald-50 px-2 py-1 text-emerald-700">Aplicar sugerencias</button><button type="button" onClick={() => setSugerenciasIA(null)} className="rounded border px-2 py-1">Descartar sugerencias</button></div></div> : null}</div>
-<div><label className="text-sm font-medium">Persona *</label><select value={formulario.persona_id} onChange={(e) => setFormulario((p) => ({ ...p, persona_id: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="">Seleccionar persona</option>{personas.map((persona) => <option key={persona.id} value={persona.id}>{persona.nombre} {persona.apellido ?? ''}</option>)}</select></div>
-<button type="button" onClick={() => setMostrarAvanzado((v) => !v)} className="text-sm text-slate-600">{mostrarAvanzado ? 'Ocultar campos avanzados' : 'Mostrar campos avanzados'}</button>
-{mostrarAvanzado && <div className="grid gap-2"><input value={formulario.descripcion} onChange={(e) => setFormulario((p) => ({ ...p, descripcion: e.target.value }))} className="rounded-xl border px-3 py-2" placeholder="Descripción" /><textarea value={formulario.observaciones} onChange={(e) => setFormulario((p) => ({ ...p, observaciones: e.target.value }))} className="rounded-xl border px-3 py-2" placeholder="Observaciones" /></div>}
-<div className="sf-progress-row text-sm"><p className="font-medium">Resumen</p><p>{formulario.establecimiento || 'Sin establecimiento'} · {formulario.moneda} {formulario.monto || '0'} · {esTarjetaCredito ? `${formulario.cantidad_cuotas} cuota(s)` : 'Pago único'}</p></div>
-<button disabled={guardando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white">{guardando ? 'Guardando...' : 'Guardar gasto'}</button></form>{modalCategoriaAbierto ? <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/35 p-3 sm:items-center sm:p-6" onClick={cerrarModalCategoria}><div className="sf-card w-full max-w-lg p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}><p className="text-base font-semibold">Crear nueva categoría</p><p className="mt-1 text-xs text-slate-600">Creá una categoría sin salir del flujo de nuevo gasto.</p><div className="mt-3 space-y-3"><div><label className="block text-xs font-medium">Nombre de categoría</label><input autoFocus value={nuevaCategoriaNombre} onChange={(e) => setNuevaCategoriaNombre(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" /></div><div><label className="block text-xs font-medium">Icono opcional</label><input value={nuevaCategoriaIcono} onChange={(e) => setNuevaCategoriaIcono(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Ejemplo: 🧾" /></div><div><label className="block text-xs font-medium">Color opcional</label><input value={nuevaCategoriaColor} onChange={(e) => setNuevaCategoriaColor(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Ejemplo: #0ea5e9" /></div></div><div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" onClick={cerrarModalCategoria} className="sf-button">Cancelar</button><button type="button" onClick={() => void crearYSeleccionarCategoria()} disabled={creandoCategoria} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:opacity-60">{creandoCategoria ? 'Creando categoría...' : 'Crear y usar'}</button></div></div></div> : null}</section>;
+  return (
+    <section className="mx-auto max-w-4xl space-y-4">
+      <FeedbackToast tipo={error ? 'error' : mensaje ? 'ok' : advertencia ? 'warning' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensaje ?? advertencia ?? mensajeComprobante} />
+      <h1 className="text-2xl font-semibold">Nuevo gasto</h1>
+      {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorTecnicoDesarrollo error={errorTecnico} />
+      {mensaje && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{mensaje}</p>}
+      {advertencia && <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">{advertencia}</p>}
+      <form onSubmit={guardar} className="sf-card flex flex-col gap-4 p-4 sm:p-5">
+        <div>
+          <label className="text-sm font-medium">Monto *{etiquetaIA('monto')}</label>
+          <input value={formulario.monto} onChange={(e) => editarCampo('monto', { monto: e.target.value })} inputMode="decimal" className="mt-1 w-full rounded-xl border px-4 py-3 text-2xl font-semibold" placeholder="0,00" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input value={formulario.moneda} onChange={(e) => editarCampo('moneda', { moneda: e.target.value })} className="rounded-xl border px-3 py-2" />
+          <input type="date" value={formulario.fecha_gasto} onChange={(e) => editarCampo('fecha_gasto', { fecha_gasto: e.target.value })} className="rounded-xl border px-3 py-2" />
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium">Medio de pago *{etiquetaIA('medio_pago_id')}</p>
+          <div className="grid grid-cols-2 gap-2">
+            {medios.map((medio) => (
+              <button key={medio.id} type="button" onClick={() => editarCampo('medio_pago_id', { medio_pago_id: medio.id })} className={`sf-chip ${formulario.medio_pago_id === medio.id ? 'is-selected' : ''}`}>
+                {medio.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="text-sm font-medium">Establecimiento *{etiquetaIA('establecimiento')}</label>
+          <input
+            value={formulario.establecimiento}
+            onChange={(e) =>
+              editarCampo('establecimiento', {
+                establecimiento: e.target.value,
+              })
+            }
+            className="mt-1 w-full rounded-xl border px-3 py-2"
+          />
+        </div>
+        <div id="seccion-categorias">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-medium">Categoría *{etiquetaIA('categoria_id')}</p>
+            <button type="button" onClick={() => abrirModalCrearCategoria()} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+              + Nueva categoría
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {categorias.map((cat) => (
+              <button key={cat.id} type="button" onClick={() => editarCampo('categoria_id', { categoria_id: cat.id })} className={`sf-chip ${formulario.categoria_id === cat.id ? 'is-selected' : ''}`}>
+                {cat.icono ? `${cat.icono} ` : ''}
+                {cat.nombre}
+              </button>
+            ))}
+          </div>
+        </div>
+        {esTarjetaCredito && (
+          <>
+            <div>
+              <p className="mb-2 text-sm font-medium">Cuenta de tarjeta *</p>
+              <div className="space-y-2">
+                {cuentas.map((cuenta) => (
+                  <button
+                    key={cuenta.id}
+                    type="button"
+                    onClick={() =>
+                      setFormulario((p) => ({
+                        ...p,
+                        cuenta_tarjeta_id: cuenta.id,
+                        tarjeta_fisica_id: '',
+                      }))
+                    }
+                    className={`w-full rounded-xl border p-3 text-left ${formulario.cuenta_tarjeta_id === cuenta.id ? 'border-emerald-500 bg-emerald-50' : ''}`}
+                  >
+                    <p className="font-medium">{cuenta.nombre_cuenta}</p>
+                    <p className="text-xs text-slate-500">
+                      {cuenta.banco ?? ''} {cuenta.marca ?? ''}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-sm font-medium">Tarjeta física *</p>
+              <div className="space-y-2">
+                {tarjetasCuenta.map((tarjeta) => (
+                  <button
+                    key={tarjeta.id}
+                    type="button"
+                    onClick={() =>
+                      setFormulario((p) => ({
+                        ...p,
+                        tarjeta_fisica_id: tarjeta.id,
+                        persona_id: tarjeta.persona_id,
+                      }))
+                    }
+                    className={`w-full rounded-xl border p-3 text-left ${formulario.tarjeta_fisica_id === tarjeta.id ? 'border-emerald-500 bg-emerald-50' : ''}`}
+                  >
+                    {tarjeta.alias ?? tarjeta.tipo} {tarjeta.ultimos_4_digitos ? `• ${tarjeta.ultimos_4_digitos}` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Cantidad de cuotas *</label>
+              <input
+                type="number"
+                min={1}
+                value={formulario.cantidad_cuotas}
+                onChange={(e) =>
+                  setFormulario((p) => ({
+                    ...p,
+                    cantidad_cuotas: Number(e.target.value) || 1,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+              />
+            </div>
+          </>
+        )}
+        <div className="order-first rounded-xl border border-emerald-200 bg-[var(--surface-2)] p-3">
+          <p className="text-sm font-semibold">1. Foto o comprobante</p>
+          <p className="text-xs text-slate-600">Empezá por acá para que la IA complete los datos. También podés continuar sin comprobante y cargar todo manualmente.</p>
+          <p className="mt-1 text-xs text-slate-500">¿Recibiste el comprobante por WhatsApp? En iPhone, guardá la imagen en Fotos o Archivos y después subila desde SpendFlow Planner.</p>
+          <details className="mt-2 rounded-lg border border-slate-200 bg-[var(--surface-2)] p-2 text-xs text-slate-700">
+            <summary className="cursor-pointer font-medium">Cómo cargar desde WhatsApp en iPhone</summary>
+            <ol className="mt-2 list-decimal space-y-1 pl-4">
+              <li>Abrí la imagen o comprobante en WhatsApp.</li>
+              <li>Tocá Compartir o Guardar.</li>
+              <li>Guardalo en Fotos o Archivos.</li>
+              <li>Volvé a SpendFlow Planner.</li>
+              <li>Tocá “Elegir de galería” o “Subir archivo”.</li>
+              <li>Luego presioná “Analizar comprobante”.</li>
+            </ol>
+          </details>
+          <p className="mt-2 text-[11px] text-slate-500">Compartir directamente desde WhatsApp puede no estar disponible en iPhone. Usá Fotos o Archivos como alternativa.</p>
+          <div
+            tabIndex={0}
+            onPaste={manejarPegadoComprobante}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setArrastrandoComprobante(true);
+            }}
+            onDragLeave={() => setArrastrandoComprobante(false)}
+            onDrop={manejarDropComprobante}
+            className={`mt-2 rounded-xl border border-dashed p-3 ${arrastrandoComprobante ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-[var(--surface-2)]'}`}
+          >
+            <p className="text-xs text-slate-600">Arrastrá una imagen/PDF acá o pegá una imagen copiada.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <button type="button" onClick={() => inputCamaraRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">
+                Tomar foto
+              </button>
+              <button type="button" onClick={() => inputSubirRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">
+                Elegir de galería
+              </button>
+              <button type="button" onClick={() => inputSubirRef.current?.click()} className="min-h-11 rounded-xl border bg-[var(--surface)] px-4 py-3 text-sm font-semibold">
+                Subir archivo
+              </button>
+            </div>
+            <button type="button" onClick={() => void pegarComprobanteDesdeBoton()} className="mt-2 w-full rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">
+              Pegar imagen
+            </button>
+            <input ref={inputCamaraRef} type="file" accept="image/*,.jpg,.jpeg,.png,.webp" capture="environment" className="hidden" onChange={manejarCambioArchivo} />
+            <input ref={inputSubirRef} type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" className="hidden" onChange={manejarCambioArchivo} />
+          </div>
+          {mensajeComprobante ? <p className="mt-2 text-xs text-slate-500">{mensajeComprobante}</p> : null}
+          {comprobante ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-[var(--surface-2)] p-3 text-xs">
+              {comprobante.type === 'application/pdf' ? <p className="rounded-lg border border-slate-300 bg-[var(--surface)] px-3 py-2 text-slate-700">📄 PDF seleccionado</p> : null}
+              {previewComprobanteUrl && comprobante.type.startsWith('image/') ? <img src={previewComprobanteUrl} alt="Vista previa del comprobante" className="mb-2 max-h-44 w-auto rounded-lg border border-slate-200 object-contain" /> : null}
+              <p className="truncate">
+                <span className="font-medium">Archivo:</span> {comprobante.name}
+              </p>
+              <p>
+                <span className="font-medium">Tipo:</span> {comprobante.type || 'Sin tipo'}
+              </p>
+              <p>
+                <span className="font-medium">Tamaño:</span> {formatearTamanoArchivo(comprobante.size)}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => void analizarComprobante()} disabled={analizandoComprobante} className="rounded border border-emerald-600 px-3 py-2 text-emerald-700 disabled:opacity-60">
+                  {analizandoComprobante ? (comprobante.type === 'application/pdf' ? 'Analizando PDF…' : 'Analizando comprobante…') : 'Analizar comprobante'}
+                </button>
+                <button type="button" onClick={() => inputSubirRef.current?.click()} className="rounded border px-3 py-2">
+                  Cambiar comprobante
+                </button>
+                <button type="button" onClick={limpiarComprobanteSeleccionado} className="rounded border px-3 py-2">
+                  Quitar comprobante
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">Sin comprobante seleccionado.</p>
+          )}
+          {sugerenciasIA ? (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-[var(--surface-2)] p-3 text-xs">
+              <p className="font-semibold text-sm">Datos sugeridos por IA</p>
+              <p className="mt-1 text-amber-700">Revisá los datos antes de guardar. La lectura automática puede tener errores.</p>
+              <ul className="mt-2 space-y-1 text-slate-700">
+                <li>
+                  <span className="font-medium">Datos leídos - Fecha:</span> {sugerenciasIA.fecha_gasto ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Datos leídos - Establecimiento:</span> {sugerenciasIA.establecimiento ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Datos leídos - Monto:</span> {sugerenciasIA.monto ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Datos leídos - Moneda:</span> {sugerenciasIA.moneda ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Categoría sugerida por IA:</span> {sugerenciasIA.categoria_sugerida ?? 'Sin sugerencia'} <span className="ml-1 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">sugerido por IA</span>
+                </li>
+                <li>
+                  <span className="font-medium">Categoría aplicada:</span> {categoriaFormulario?.nombre ?? categoriaSugeridaAplicada?.nombre ?? 'No aplicada'} <span className="ml-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">aplicado</span>
+                </li>
+                <li>
+                  <span className="font-medium">Medio de pago sugerido por IA:</span> {sugerenciasIA.medio_pago_sugerido ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Medio de pago aplicado:</span> {sugerenciasIA.medio_pago_id ? (medios.find((medio) => medio.id === sugerenciasIA.medio_pago_id)?.nombre ?? 'Sin coincidencia') : 'No aplicado'}
+                </li>
+                <li>
+                  <span className="font-medium">Confianza:</span> {sugerenciasIA.confianza ? `${Math.round(sugerenciasIA.confianza * 100)}%` : 'Sin dato'}
+                </li>
+                <li>
+                  <span className="font-medium">CUIT/RUC/NIT:</span> {sugerenciasIA.identificador_fiscal ?? 'Sin sugerencia'}
+                </li>
+                <li>
+                  <span className="font-medium">Observaciones:</span> {sugerenciasIA.observaciones ?? 'Sin observaciones'}
+                </li>
+              </ul>
+              {sugerenciasIA.categoria_mapeo_detalle ? (
+                <p className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+                  <span className="font-medium">Motivo:</span> {sugerenciasIA.categoria_mapeo_detalle}
+                </p>
+              ) : (
+                <p className="mt-2 rounded border border-slate-200 bg-[var(--surface)] px-2 py-1 text-slate-600">Si no corresponde, podés elegir otra categoría o crear una nueva.</p>
+              )}
+              {sugerenciasIA.categoria_generica ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{MENSAJE_CATEGORIA_GENERICA}</p> : null}
+              {sugerenciasIA.recomendacion_categoria_impuestos ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">{sugerenciasIA.recomendacion_categoria_impuestos}</p> : null}
+              {sugerenciasIA.categoria_requiere_revision ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => document.getElementById('seccion-categorias')?.scrollIntoView({ behavior: 'smooth' })} className="rounded-lg border border-amber-300 bg-[var(--surface)] px-3 py-1.5 text-xs font-medium text-amber-800">
+                    Cambiar categoría
+                  </button>
+                  <button type="button" onClick={() => abrirModalCrearCategoria(sugerenciasIA.categoria_no_aplicada ?? sugerenciasIA.categoria_sugerida ?? '')} className="rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+                    + Nueva categoría
+                  </button>
+                </div>
+              ) : null}
+              {sugerenciasIA.medio_pago_mapeo_detalle ? <p className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">{sugerenciasIA.medio_pago_mapeo_detalle}</p> : null}
+              {sugerenciasIA.categoria_no_aplicada ? (
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                  <p className="text-sm font-semibold">La IA sugirió una categoría que no existe: {sugerenciasIA.categoria_no_aplicada}.</p>
+                  <p className="text-xs">Podés crearla ahora o elegir una categoría existente.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccionCategoriaSugerida('existente');
+                        document.getElementById('seccion-categorias')?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="rounded-lg border border-amber-500 bg-[var(--surface)] px-3 py-2 text-xs font-medium"
+                    >
+                      Usar categoría existente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccionCategoriaSugerida('crear');
+                        abrirModalCrearCategoria(sugerenciasIA.categoria_no_aplicada ?? '');
+                      }}
+                      className="rounded-lg border border-emerald-600 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+                    >
+                      Crear categoría {sugerenciasIA.categoria_no_aplicada}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccionCategoriaSugerida('ignorar');
+                        setSugerenciasIA((prev) => (prev ? { ...prev, categoria_no_aplicada: undefined } : prev));
+                      }}
+                      className="rounded-lg border bg-[var(--surface)] px-3 py-2 text-xs font-medium"
+                    >
+                      Ignorar sugerencia
+                    </button>
+                  </div>
+                  {accionCategoriaSugerida === 'existente' ? <p className="mt-2 text-xs text-amber-700">Seleccioná manualmente una categoría existente.</p> : null}
+                </div>
+              ) : null}
+              {sugerenciasIA.medio_pago_no_aplicado ? <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">La IA sugirió un medio de pago sin coincidencia clara: {sugerenciasIA.medio_pago_no_aplicado}. Elegí uno manualmente.</p> : null}
+              {sugerenciasIA.emisor_factura || sugerenciasIA.receptor_factura ? (
+                <div className="mt-2 rounded border border-slate-200 bg-[var(--surface)] px-2 py-2 text-slate-700">
+                  <p>
+                    <span className="font-medium">Emisor detectado:</span> {sugerenciasIA.emisor_factura || 'Sin dato'}
+                  </p>
+                  <p>
+                    <span className="font-medium">Receptor detectado:</span> {sugerenciasIA.receptor_factura || 'Sin dato'}
+                  </p>
+                </div>
+              ) : null}
+              {(sugerenciasIA.establecimiento_candidatos?.length ?? 0) > 1 ? (
+                <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-amber-800">Se detectaron varios nombres en el comprobante. Elegí cuál corresponde al establecimiento.</p>
+                  <div className="mt-2 space-y-2">
+                    {(sugerenciasIA.establecimiento_candidatos ?? []).map((candidato) => (
+                      <label key={`${candidato.nombre}-${candidato.tipo}`} className="flex items-center gap-2 rounded-lg border border-amber-200 bg-[var(--surface)] px-2 py-2">
+                        <input
+                          type="radio"
+                          name="establecimiento-candidato"
+                          checked={establecimientoSeleccionadoIA === candidato.nombre}
+                          onChange={() => {
+                            setEstablecimientoSeleccionadoIA(candidato.nombre);
+                            setFormulario((prev) => ({
+                              ...prev,
+                              establecimiento: candidato.nombre,
+                            }));
+                          }}
+                        />
+                        <span className="text-xs">
+                          {candidato.nombre} · {esCandidatoEmisor(candidato.tipo) ? 'Emisor / proveedor' : ['receptor', 'cliente', 'comprador', 'consumidor', 'facturado_a', 'destinatario'].includes(candidato.tipo) ? 'Receptor / cliente' : 'Otro posible nombre'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {sugerenciasIA.advertencias?.length ? (
+                <ul className="mt-2 list-disc pl-5 text-amber-700">
+                  {sugerenciasIA.advertencias.map((advertenciaItem) => (
+                    <li key={advertenciaItem}>{advertenciaItem}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => aplicarSugerenciasIA()} className="rounded border border-emerald-600 bg-emerald-50 px-2 py-1 text-emerald-700">
+                  Volver a aplicar sugerencias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSugerenciasIA(null);
+                    setCamposDetectadosIA(new Set());
+                  }}
+                  className="rounded border px-2 py-1"
+                >
+                  Descartar sugerencias
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <label className="text-sm font-medium">Persona *</label>
+          <select value={formulario.persona_id} onChange={(e) => setFormulario((p) => ({ ...p, persona_id: e.target.value }))} className="mt-1 w-full rounded-xl border px-3 py-2">
+            <option value="">Seleccionar persona</option>
+            {personas.map((persona) => (
+              <option key={persona.id} value={persona.id}>
+                {persona.nombre} {persona.apellido ?? ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="button" onClick={() => setMostrarAvanzado((v) => !v)} className="text-sm text-slate-600">
+          {mostrarAvanzado ? 'Ocultar campos avanzados' : 'Mostrar campos avanzados'}
+        </button>
+        {mostrarAvanzado && (
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">
+              Descripción{etiquetaIA('descripcion')}
+              <input value={formulario.descripcion} onChange={(e) => editarCampo('descripcion', { descripcion: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2" />
+            </label>
+            <label className="text-sm font-medium">
+              Observaciones{etiquetaIA('observaciones')}
+              <textarea
+                value={formulario.observaciones}
+                onChange={(e) =>
+                  editarCampo('observaciones', {
+                    observaciones: e.target.value,
+                  })
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2"
+              />
+            </label>
+          </div>
+        )}
+        <div className="sf-progress-row text-sm">
+          <p className="font-medium">Resumen</p>
+          <p>
+            {formulario.establecimiento || 'Sin establecimiento'} · {formulario.moneda} {formulario.monto || '0'} · {esTarjetaCredito ? `${formulario.cantidad_cuotas} cuota(s)` : 'Pago único'}
+          </p>
+        </div>
+        <button disabled={guardando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white">
+          {guardando ? 'Guardando...' : 'Guardar gasto'}
+        </button>
+      </form>
+      {modalCategoriaAbierto ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/35 p-3 sm:items-center sm:p-6" onClick={cerrarModalCategoria}>
+          <div className="sf-card w-full max-w-lg p-4 shadow-2xl sm:p-5" onClick={(event) => event.stopPropagation()}>
+            <p className="text-base font-semibold">Crear nueva categoría</p>
+            <p className="mt-1 text-xs text-slate-600">Creá una categoría sin salir del flujo de nuevo gasto.</p>
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block text-xs font-medium">Nombre de categoría</label>
+                <input autoFocus value={nuevaCategoriaNombre} onChange={(e) => setNuevaCategoriaNombre(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium">Icono opcional</label>
+                <input value={nuevaCategoriaIcono} onChange={(e) => setNuevaCategoriaIcono(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Ejemplo: 🧾" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium">Color opcional</label>
+                <input value={nuevaCategoriaColor} onChange={(e) => setNuevaCategoriaColor(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Ejemplo: #0ea5e9" />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" onClick={cerrarModalCategoria} className="sf-button">
+                Cancelar
+              </button>
+              <button type="button" onClick={() => void crearYSeleccionarCategoria()} disabled={creandoCategoria} className="rounded-lg border border-emerald-600 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 disabled:opacity-60">
+                {creandoCategoria ? 'Creando categoría...' : 'Crear y usar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
 }
