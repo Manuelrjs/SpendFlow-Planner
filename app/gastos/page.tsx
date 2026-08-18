@@ -8,11 +8,7 @@ import { comprimirImagenComprobante } from '@/lib/comprobantes-imagen';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
-import {
-  calcularPeriodoResumenYVencimiento,
-  calcularPeriodoTarjeta,
-  CalendarioTarjeta,
-} from '@/utils/tarjetas';
+import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, CalendarioTarjeta } from '@/utils/tarjetas';
 import { obtenerOCrearCalendarioEstimado } from '@/lib/calendario-tarjetas';
 
 type Gasto = {
@@ -35,7 +31,12 @@ type Gasto = {
 
 type OpcionBase = { id: string; nombre: string };
 type Persona = { id: string; nombre: string; apellido: string | null };
-type CuentaTarjeta = { id: string; nombre_cuenta: string; dia_cierre_habitual: number | null; dias_hasta_vencimiento: number | null };
+type CuentaTarjeta = {
+  id: string;
+  nombre_cuenta: string;
+  dia_cierre_habitual: number | null;
+  dias_hasta_vencimiento: number | null;
+};
 type TarjetaFisica = {
   id: string;
   cuenta_tarjeta_id: string;
@@ -90,6 +91,18 @@ type Filtros = {
 };
 
 const ESTADOS_EDITABLES_CUOTA = new Set(['pendiente', 'proyectada', 'no_incluida', 'reprogramada']);
+
+function formatearImporte(monto: number, moneda: string) {
+  try {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: moneda || 'ARS',
+      minimumFractionDigits: 2,
+    }).format(monto);
+  } catch {
+    return `${moneda || '$'} ${monto.toFixed(2)}`;
+  }
+}
 async function obtenerGrupoIdActual() {
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
@@ -99,7 +112,17 @@ async function obtenerGrupoIdActual() {
   return data.grupo_id as string;
 }
 
-const FILTROS_INICIALES: Filtros = { busqueda: '', fecha_desde: '', fecha_hasta: '', categoria_id: '', persona_id: '', medio_pago_id: '', cuenta_tarjeta_id: '', tarjeta_fisica_id: '', estado_registro: 'activos' };
+const FILTROS_INICIALES: Filtros = {
+  busqueda: '',
+  fecha_desde: '',
+  fecha_hasta: '',
+  categoria_id: '',
+  persona_id: '',
+  medio_pago_id: '',
+  cuenta_tarjeta_id: '',
+  tarjeta_fisica_id: '',
+  estado_registro: 'activos',
+};
 
 function formatearTamanoArchivo(tamano: number) {
   if (tamano < 1024 * 1024) return `${(tamano / 1024).toFixed(1)} KB`;
@@ -119,7 +142,6 @@ function crearNombreComprobantePegado() {
 function etiquetaCuota(numeroCuota: number, totalCuotas: number) {
   return totalCuotas === 1 ? 'Pago único' : `${numeroCuota}/${totalCuotas}`;
 }
-
 
 export default function Page() {
   const [grupoId, setGrupoId] = useState<string | null>(null);
@@ -155,13 +177,19 @@ export default function Page() {
         const perfil = await obtenerPerfilActivo();
         setGrupoId(perfil.grupo_id);
         setUsuarioEmail(perfil.email);
-        if (process.env.NODE_ENV !== 'production') console.debug('[SpendWise][gastos] grupo_id usado', perfil.grupo_id, { email: perfil.email });
+        if (process.env.NODE_ENV !== 'production')
+          console.debug('[SpendWise][gastos] grupo_id usado', perfil.grupo_id, {
+            email: perfil.email,
+          });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'No se pudo cargar el grupo activo.');
       }
     })();
   }, []);
-  useEffect(() => { if (!grupoId) return; void cargarDatos(); }, [grupoId]);
+  useEffect(() => {
+    if (!grupoId) return;
+    void cargarDatos();
+  }, [grupoId]);
 
   const nombresCategoria = useMemo(() => new Map(categorias.map((c) => [c.id, c.nombre])), [categorias]);
   const nombresMedioPago = useMemo(() => new Map(mediosPago.map((m) => [m.id, m.nombre])), [mediosPago]);
@@ -171,45 +199,57 @@ export default function Page() {
   const tarjetasEtiquetas = useMemo(() => {
     const mapa = new Map<string, string>();
     for (const t of tarjetasFisicas) {
-      const persona = t.persona_id ? nombresPersona.get(t.persona_id) ?? t.nombre_en_tarjeta ?? 'Tarjeta' : t.nombre_en_tarjeta ?? 'Tarjeta';
+      const persona = t.persona_id ? (nombresPersona.get(t.persona_id) ?? t.nombre_en_tarjeta ?? 'Tarjeta') : (t.nombre_en_tarjeta ?? 'Tarjeta');
       const base = t.alias?.trim() ? t.alias.trim() : `${persona} ${t.tipo}`.trim();
       mapa.set(t.id, t.ultimos_4_digitos ? `${base} · ****${t.ultimos_4_digitos}` : base);
     }
     return mapa;
   }, [tarjetasFisicas, nombresPersona]);
 
-  const comprobantesPorGasto = useMemo(() => comprobantes.reduce((acc, comprobante) => {
-    acc.set(comprobante.gasto_id, (acc.get(comprobante.gasto_id) ?? 0) + 1);
-    return acc;
-  }, new Map<string, number>()), [comprobantes]);
+  const comprobantesPorGasto = useMemo(
+    () =>
+      comprobantes.reduce((acc, comprobante) => {
+        acc.set(comprobante.gasto_id, (acc.get(comprobante.gasto_id) ?? 0) + 1);
+        return acc;
+      }, new Map<string, number>()),
+    [comprobantes],
+  );
 
-  const cuotasPorGasto = useMemo(() => cuotas.reduce((acc, cuota) => {
-    if (!cuota.gasto_id) return acc;
-    const lista = acc.get(cuota.gasto_id) ?? [];
-    lista.push(cuota);
-    acc.set(cuota.gasto_id, lista);
-    return acc;
-  }, new Map<string, CuotaTarjeta[]>()), [cuotas]);
+  const cuotasPorGasto = useMemo(
+    () =>
+      cuotas.reduce((acc, cuota) => {
+        if (!cuota.gasto_id) return acc;
+        const lista = acc.get(cuota.gasto_id) ?? [];
+        lista.push(cuota);
+        acc.set(cuota.gasto_id, lista);
+        return acc;
+      }, new Map<string, CuotaTarjeta[]>()),
+    [cuotas],
+  );
 
-  const cuotasGastoEditando = useMemo(() => gastoEditando ? cuotas.filter((c) => c.gasto_id === gastoEditando.id) : [], [cuotas, gastoEditando]);
-  const comprobantesGastoEditando = useMemo(() => gastoEditando ? comprobantes.filter((c) => c.gasto_id === gastoEditando.id) : [], [comprobantes, gastoEditando]);
+  const cuotasGastoEditando = useMemo(() => (gastoEditando ? cuotas.filter((c) => c.gasto_id === gastoEditando.id) : []), [cuotas, gastoEditando]);
+  const comprobantesGastoEditando = useMemo(() => (gastoEditando ? comprobantes.filter((c) => c.gasto_id === gastoEditando.id) : []), [comprobantes, gastoEditando]);
   const gastoEditandoTieneCuotas = cuotasGastoEditando.length > 0;
 
-  const gastosFiltrados = useMemo(() => gastos.filter((gasto) => {
-    if (filtros.estado_registro === 'activos' && gasto.estado_registro === 'anulado') return false;
-    if (filtros.estado_registro === 'anulados' && gasto.estado_registro !== 'anulado') return false;
-    if (filtros.fecha_desde && gasto.fecha_gasto < filtros.fecha_desde) return false;
-    if (filtros.fecha_hasta && gasto.fecha_gasto > filtros.fecha_hasta) return false;
-    if (filtros.categoria_id && gasto.categoria_id !== filtros.categoria_id) return false;
-    if (filtros.persona_id && gasto.persona_id !== filtros.persona_id) return false;
-    if (filtros.medio_pago_id && gasto.medio_pago_id !== filtros.medio_pago_id) return false;
-    if (filtros.cuenta_tarjeta_id && gasto.cuenta_tarjeta_id !== filtros.cuenta_tarjeta_id) return false;
-    if (filtros.tarjeta_fisica_id && gasto.tarjeta_fisica_id !== filtros.tarjeta_fisica_id) return false;
-    const texto = filtros.busqueda.trim().toLowerCase();
-    if (!texto) return true;
-    const bolsa = [gasto.establecimiento, gasto.descripcion ?? '', gasto.observaciones ?? '', String(gasto.monto), nombresPersona.get(gasto.persona_id) ?? '', nombresCategoria.get(gasto.categoria_id) ?? '', nombresMedioPago.get(gasto.medio_pago_id) ?? '', gasto.cuenta_tarjeta_id ? nombresCuenta.get(gasto.cuenta_tarjeta_id) ?? '' : '', gasto.tarjeta_fisica_id ? tarjetasEtiquetas.get(gasto.tarjeta_fisica_id) ?? '' : ''].join(' ').toLowerCase();
-    return bolsa.includes(texto);
-  }), [filtros, gastos, nombresPersona, nombresCategoria, nombresMedioPago, nombresCuenta, tarjetasEtiquetas]);
+  const gastosFiltrados = useMemo(
+    () =>
+      gastos.filter((gasto) => {
+        if (filtros.estado_registro === 'activos' && gasto.estado_registro === 'anulado') return false;
+        if (filtros.estado_registro === 'anulados' && gasto.estado_registro !== 'anulado') return false;
+        if (filtros.fecha_desde && gasto.fecha_gasto < filtros.fecha_desde) return false;
+        if (filtros.fecha_hasta && gasto.fecha_gasto > filtros.fecha_hasta) return false;
+        if (filtros.categoria_id && gasto.categoria_id !== filtros.categoria_id) return false;
+        if (filtros.persona_id && gasto.persona_id !== filtros.persona_id) return false;
+        if (filtros.medio_pago_id && gasto.medio_pago_id !== filtros.medio_pago_id) return false;
+        if (filtros.cuenta_tarjeta_id && gasto.cuenta_tarjeta_id !== filtros.cuenta_tarjeta_id) return false;
+        if (filtros.tarjeta_fisica_id && gasto.tarjeta_fisica_id !== filtros.tarjeta_fisica_id) return false;
+        const texto = filtros.busqueda.trim().toLowerCase();
+        if (!texto) return true;
+        const bolsa = [gasto.establecimiento, gasto.descripcion ?? '', gasto.observaciones ?? '', String(gasto.monto), nombresPersona.get(gasto.persona_id) ?? '', nombresCategoria.get(gasto.categoria_id) ?? '', nombresMedioPago.get(gasto.medio_pago_id) ?? '', gasto.cuenta_tarjeta_id ? (nombresCuenta.get(gasto.cuenta_tarjeta_id) ?? '') : '', gasto.tarjeta_fisica_id ? (tarjetasEtiquetas.get(gasto.tarjeta_fisica_id) ?? '') : ''].join(' ').toLowerCase();
+        return bolsa.includes(texto);
+      }),
+    [filtros, gastos, nombresPersona, nombresCategoria, nombresMedioPago, nombresCuenta, tarjetasEtiquetas],
+  );
 
   const totalOperativo = gastosFiltrados.filter((g) => g.estado_registro !== 'anulado').reduce((acc, g) => acc + g.monto, 0);
   const totalAnulado = gastosFiltrados.filter((g) => g.estado_registro === 'anulado').reduce((acc, g) => acc + g.monto, 0);
@@ -221,22 +261,18 @@ export default function Page() {
     if (!gastoEditando?.cuenta_tarjeta_id) return [];
     const ids = new Set<string>();
     const asociadas = tarjetasFisicas.filter((t) => t.cuenta_tarjeta_id === gastoEditando.cuenta_tarjeta_id && (t.activo || t.id === gastoEditando.tarjeta_fisica_id));
-    return asociadas.filter((t) => (ids.has(t.id) ? false : (ids.add(t.id), true))).map((t) => ({ id: t.id, nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta' }));
+    return asociadas
+      .filter((t) => (ids.has(t.id) ? false : (ids.add(t.id), true)))
+      .map((t) => ({
+        id: t.id,
+        nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta',
+      }));
   }, [gastoEditando, tarjetasFisicas, tarjetasEtiquetas]);
 
   async function cargarDatos() {
     if (!grupoId) return;
     setErrorTecnico(null);
-    const [g, c, m, p, ct, tf, cuotasRes, cal] = await Promise.all([
-      supabase.from('gastos').select('id,fecha_gasto,establecimiento,descripcion,observaciones,categoria_id,monto,moneda,medio_pago_id,persona_id,cuenta_tarjeta_id,tarjeta_fisica_id,cantidad_cuotas,estado_registro,creado_en').eq('grupo_id', grupoId).order('fecha_gasto', { ascending: false }),
-      supabase.from('categorias').select('id,nombre').eq('grupo_id', grupoId).order('nombre'),
-      supabase.from('medios_pago').select('id,nombre,tipo').eq('grupo_id', grupoId).order('nombre'),
-      supabase.from('personas').select('id,nombre,apellido').eq('grupo_id', grupoId).order('nombre'),
-      supabase.from('cuentas_tarjeta').select('id,nombre_cuenta,dia_cierre_habitual,dias_hasta_vencimiento').eq('grupo_id', grupoId).order('nombre_cuenta'),
-      supabase.from('tarjetas_fisicas').select('id,cuenta_tarjeta_id,persona_id,tipo,nombre_en_tarjeta,alias,ultimos_4_digitos,activo').eq('grupo_id', grupoId).order('id'),
-      supabase.from('cuotas_tarjeta').select('id,gasto_id,numero_cuota,total_cuotas,periodo_pago_estimado,monto_cuota,estado,origen_cuota,persona_id,tarjeta_fisica_id,cuenta_tarjeta_id,observaciones,motivo_modificacion').eq('grupo_id', grupoId),
-      supabase.from('calendario_tarjetas').select('id,cuenta_tarjeta_id,periodo_resumen,fecha_cierre,fecha_vencimiento,estado_calendario,origen_fecha,observaciones').eq('grupo_id', grupoId),
-    ]);
+    const [g, c, m, p, ct, tf, cuotasRes, cal] = await Promise.all([supabase.from('gastos').select('id,fecha_gasto,establecimiento,descripcion,observaciones,categoria_id,monto,moneda,medio_pago_id,persona_id,cuenta_tarjeta_id,tarjeta_fisica_id,cantidad_cuotas,estado_registro,creado_en').eq('grupo_id', grupoId).order('fecha_gasto', { ascending: false }), supabase.from('categorias').select('id,nombre').eq('grupo_id', grupoId).order('nombre'), supabase.from('medios_pago').select('id,nombre,tipo').eq('grupo_id', grupoId).order('nombre'), supabase.from('personas').select('id,nombre,apellido').eq('grupo_id', grupoId).order('nombre'), supabase.from('cuentas_tarjeta').select('id,nombre_cuenta,dia_cierre_habitual,dias_hasta_vencimiento').eq('grupo_id', grupoId).order('nombre_cuenta'), supabase.from('tarjetas_fisicas').select('id,cuenta_tarjeta_id,persona_id,tipo,nombre_en_tarjeta,alias,ultimos_4_digitos,activo').eq('grupo_id', grupoId).order('id'), supabase.from('cuotas_tarjeta').select('id,gasto_id,numero_cuota,total_cuotas,periodo_pago_estimado,monto_cuota,estado,origen_cuota,persona_id,tarjeta_fisica_id,cuenta_tarjeta_id,observaciones,motivo_modificacion').eq('grupo_id', grupoId), supabase.from('calendario_tarjetas').select('id,cuenta_tarjeta_id,periodo_resumen,fecha_cierre,fecha_vencimiento,estado_calendario,origen_fecha,observaciones').eq('grupo_id', grupoId)]);
     const errorPrincipal = g.error || c.error || m.error || p.error || ct.error || tf.error || cuotasRes.error || cal.error;
     if (errorPrincipal) {
       console.error('Error cargando historial de gastos', {
@@ -250,11 +286,7 @@ export default function Page() {
       return setError('No se pudieron cargar los datos de gastos.');
     }
 
-    const comp = await supabase
-      .from('comprobantes')
-      .select('id,gasto_id,grupo_id,nombre_archivo,tipo_archivo,tipo_comprobante,ruta_storage,url_storage,url_drive,tamano_bytes,creado_en,actualizado_en')
-      .eq('grupo_id', grupoId)
-      .order('creado_en', { ascending: false });
+    const comp = await supabase.from('comprobantes').select('id,gasto_id,grupo_id,nombre_archivo,tipo_archivo,tipo_comprobante,ruta_storage,url_storage,url_drive,tamano_bytes,creado_en,actualizado_en').eq('grupo_id', grupoId).order('creado_en', { ascending: false });
 
     if (comp.error) {
       console.error('Error cargando historial de gastos', {
@@ -270,16 +302,34 @@ export default function Page() {
       setComprobantes((comp.data ?? []) as Comprobante[]);
     }
 
-    if (process.env.NODE_ENV !== 'production') console.debug('[SpendWise][gastos] registros cargados', { email: usuarioEmail, grupo_id: grupoId, gastos: g.data?.length ?? 0, cuotas: cuotasRes.data?.length ?? 0, comprobantes: comp.error ? 'no disponibles' : comp.data?.length ?? 0 });
-    setGastos((g.data ?? []) as Gasto[]); setCategorias((c.data ?? []) as OpcionBase[]); setMediosPago((m.data ?? []) as OpcionBase[]); setPersonas((p.data ?? []) as Persona[]); setCuentasTarjeta((ct.data ?? []) as CuentaTarjeta[]); setTarjetasFisicas((tf.data ?? []) as TarjetaFisica[]); setCuotas((cuotasRes.data ?? []) as CuotaTarjeta[]); setCalendarios((cal.data ?? []) as CalendarioTarjeta[]);
+    if (process.env.NODE_ENV !== 'production')
+      console.debug('[SpendWise][gastos] registros cargados', {
+        email: usuarioEmail,
+        grupo_id: grupoId,
+        gastos: g.data?.length ?? 0,
+        cuotas: cuotasRes.data?.length ?? 0,
+        comprobantes: comp.error ? 'no disponibles' : (comp.data?.length ?? 0),
+      });
+    setGastos((g.data ?? []) as Gasto[]);
+    setCategorias((c.data ?? []) as OpcionBase[]);
+    setMediosPago((m.data ?? []) as OpcionBase[]);
+    setPersonas((p.data ?? []) as Persona[]);
+    setCuentasTarjeta((ct.data ?? []) as CuentaTarjeta[]);
+    setTarjetasFisicas((tf.data ?? []) as TarjetaFisica[]);
+    setCuotas((cuotasRes.data ?? []) as CuotaTarjeta[]);
+    setCalendarios((cal.data ?? []) as CalendarioTarjeta[]);
   }
-
-
 
   async function asegurarCalendarioConversion(cuenta: CuentaTarjeta, periodo: string) {
     if (!grupoId) throw new Error('No se pudo cargar el grupo activo.');
     try {
-      const resultado = await obtenerOCrearCalendarioEstimado({ supabase, cuenta, periodo, contexto: 'conversion', grupoId });
+      const resultado = await obtenerOCrearCalendarioEstimado({
+        supabase,
+        cuenta,
+        periodo,
+        contexto: 'conversion',
+        grupoId,
+      });
       const calendario = resultado.calendario as CalendarioTarjeta;
       setCalendarios((prev) => {
         const sinMismoPeriodo = prev.filter((cal) => !(cal.cuenta_tarjeta_id === cuenta.id && cal.periodo_resumen === periodo));
@@ -314,8 +364,21 @@ export default function Page() {
     }
 
     const payload = {
-      establecimiento: gastoEditando.establecimiento.trim(), categoria_id: gastoEditando.categoria_id, persona_id: gastoEditando.persona_id, descripcion: gastoEditando.descripcion, observaciones: gastoEditando.observaciones,
-      ...(tieneCuotas ? { tarjeta_fisica_id: gastoEditando.tarjeta_fisica_id } : { fecha_gasto: gastoEditando.fecha_gasto, monto: gastoEditando.monto, medio_pago_id: gastoEditando.medio_pago_id, cuenta_tarjeta_id: nuevoTarjeta ? gastoEditando.cuenta_tarjeta_id : null, tarjeta_fisica_id: nuevoTarjeta ? gastoEditando.tarjeta_fisica_id : null, cantidad_cuotas: nuevoTarjeta ? 1 : 1 }),
+      establecimiento: gastoEditando.establecimiento.trim(),
+      categoria_id: gastoEditando.categoria_id,
+      persona_id: gastoEditando.persona_id,
+      descripcion: gastoEditando.descripcion,
+      observaciones: gastoEditando.observaciones,
+      ...(tieneCuotas
+        ? { tarjeta_fisica_id: gastoEditando.tarjeta_fisica_id }
+        : {
+            fecha_gasto: gastoEditando.fecha_gasto,
+            monto: gastoEditando.monto,
+            medio_pago_id: gastoEditando.medio_pago_id,
+            cuenta_tarjeta_id: nuevoTarjeta ? gastoEditando.cuenta_tarjeta_id : null,
+            tarjeta_fisica_id: nuevoTarjeta ? gastoEditando.tarjeta_fisica_id : null,
+            cantidad_cuotas: nuevoTarjeta ? 1 : 1,
+          }),
     };
     try {
       const { error: e } = await supabase.from('gastos').update(payload).eq('id', gastoEditando.id).eq('grupo_id', grupoId);
@@ -332,10 +395,22 @@ export default function Page() {
           dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento,
         });
         const calendarioBase = await asegurarCalendarioConversion(cuenta, calculoBase.periodo_resumen);
-        const resultadoPeriodo = calcularPeriodoTarjeta({ fecha_gasto: gastoEditando.fecha_gasto, cuenta_tarjeta_id: cuenta.id, calendarios: [...calendarios, calendarioBase] });
+        const resultadoPeriodo = calcularPeriodoTarjeta({
+          fecha_gasto: gastoEditando.fecha_gasto,
+          cuenta_tarjeta_id: cuenta.id,
+          calendarios: [...calendarios, calendarioBase],
+        });
         const calendarioPago = await asegurarCalendarioConversion(cuenta, resultadoPeriodo.periodo_resumen);
         if (process.env.NODE_ENV !== 'production') {
-          console.log('[tarjeta][conversion][calculo]', { fecha_gasto: gastoEditando.fecha_gasto, dia_cierre_habitual: cuenta.dia_cierre_habitual, dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento, periodo_resumen: resultadoPeriodo.periodo_resumen, fecha_cierre: resultadoPeriodo.fecha_cierre, fecha_vencimiento: resultadoPeriodo.fecha_vencimiento, periodo_pago_estimado: resultadoPeriodo.periodo_pago });
+          console.log('[tarjeta][conversion][calculo]', {
+            fecha_gasto: gastoEditando.fecha_gasto,
+            dia_cierre_habitual: cuenta.dia_cierre_habitual,
+            dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento,
+            periodo_resumen: resultadoPeriodo.periodo_resumen,
+            fecha_cierre: resultadoPeriodo.fecha_cierre,
+            fecha_vencimiento: resultadoPeriodo.fecha_vencimiento,
+            periodo_pago_estimado: resultadoPeriodo.periodo_pago,
+          });
         }
         const { error: cuotaError } = await supabase.from('cuotas_tarjeta').insert({
           grupo_id: grupoId,
@@ -362,22 +437,24 @@ export default function Page() {
     } catch (error) {
       console.error(error);
       if (!tieneCuotas && !originalTarjeta && nuevoTarjeta) {
-        await supabase.from('gastos').update({
-          fecha_gasto: original.fecha_gasto,
-          monto: original.monto,
-          medio_pago_id: original.medio_pago_id,
-          cuenta_tarjeta_id: original.cuenta_tarjeta_id,
-          tarjeta_fisica_id: original.tarjeta_fisica_id,
-          cantidad_cuotas: original.cantidad_cuotas,
-          establecimiento: original.establecimiento,
-          categoria_id: original.categoria_id,
-          persona_id: original.persona_id,
-          descripcion: original.descripcion,
-          observaciones: original.observaciones,
-        }).eq('id', gastoEditando.id).eq('grupo_id', grupoId);
-        return setError(error instanceof Error && error.message === 'FALTA_CONFIG_CALENDARIO'
-          ? 'Esta cuenta no tiene configuración habitual de cierre/vencimiento. Completala en Tarjetas o cargá el calendario manualmente.'
-          : 'No se pudo convertir el gasto a tarjeta de crédito. Revisá la cuenta, tarjeta y calendario.');
+        await supabase
+          .from('gastos')
+          .update({
+            fecha_gasto: original.fecha_gasto,
+            monto: original.monto,
+            medio_pago_id: original.medio_pago_id,
+            cuenta_tarjeta_id: original.cuenta_tarjeta_id,
+            tarjeta_fisica_id: original.tarjeta_fisica_id,
+            cantidad_cuotas: original.cantidad_cuotas,
+            establecimiento: original.establecimiento,
+            categoria_id: original.categoria_id,
+            persona_id: original.persona_id,
+            descripcion: original.descripcion,
+            observaciones: original.observaciones,
+          })
+          .eq('id', gastoEditando.id)
+          .eq('grupo_id', grupoId);
+        return setError(error instanceof Error && error.message === 'FALTA_CONFIG_CALENDARIO' ? 'Esta cuenta no tiene configuración habitual de cierre/vencimiento. Completala en Tarjetas o cargá el calendario manualmente.' : 'No se pudo convertir el gasto a tarjeta de crédito. Revisá la cuenta, tarjeta y calendario.');
       }
       return setError('No se pudo guardar la edición.');
     }
@@ -385,7 +462,9 @@ export default function Page() {
       if (original.persona_id !== gastoEditando.persona_id) await supabase.from('cuotas_tarjeta').update({ persona_id: gastoEditando.persona_id }).eq('gasto_id', gastoEditando.id).eq('grupo_id', grupoId).not('estado', 'in', '("pagada","cancelada")');
       if (original.tarjeta_fisica_id !== gastoEditando.tarjeta_fisica_id) await supabase.from('cuotas_tarjeta').update({ tarjeta_fisica_id: gastoEditando.tarjeta_fisica_id }).eq('gasto_id', gastoEditando.id).eq('grupo_id', grupoId).not('estado', 'in', '("pagada","cancelada")');
     }
-    if (!(!tieneCuotas && !originalTarjeta && nuevoTarjeta)) setMensajeExito('Gasto actualizado correctamente.'); setGastoEditando(null); await cargarDatos();
+    if (!(!tieneCuotas && !originalTarjeta && nuevoTarjeta)) setMensajeExito('Gasto actualizado correctamente.');
+    setGastoEditando(null);
+    await cargarDatos();
   }
 
   async function actualizarCuotaAsociada(cuota: CuotaTarjeta, cambios: { periodo_pago_estimado: string; observaciones: string | null }) {
@@ -403,9 +482,6 @@ export default function Page() {
     await cargarDatos();
   }
 
-
-
-
   async function seleccionarComprobante(archivo: File | null) {
     if (!archivo) return false;
     setComprobanteNuevo(null);
@@ -419,9 +495,7 @@ export default function Page() {
       return false;
     }
     setComprobanteNuevo(archivoPreparado);
-    setMensajeComprobante(resultado.comprimido
-      ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.`
-      : null);
+    setMensajeComprobante(resultado.comprimido ? `Imagen optimizada para ahorrar espacio: ${formatearTamanoArchivo(resultado.tamanoOriginal)} → ${formatearTamanoArchivo(archivoPreparado.size)}.` : null);
     setError(null);
     return true;
   }
@@ -472,7 +546,7 @@ export default function Page() {
     const validacion = validarComprobante(archivo);
     if (!validacion.valido) return setError(validacion.mensaje);
     try {
-      const grupoActualId = grupoId ?? await obtenerGrupoIdActual();
+      const grupoActualId = grupoId ?? (await obtenerGrupoIdActual());
       const gasto = gastos.find((item) => item.id === gastoId);
       const rutaStorage = crearRutaStorageComprobante({
         grupoId: grupoActualId,
@@ -481,7 +555,10 @@ export default function Page() {
         fechaGasto: gasto?.fecha_gasto,
       });
       console.debug('[SpendWise][comprobante] storage path', rutaStorage);
-      const { error: errorStorage } = await supabase.storage.from(BUCKET_COMPROBANTES).upload(rutaStorage, archivo, { upsert: false, contentType: archivo.type || undefined });
+      const { error: errorStorage } = await supabase.storage.from(BUCKET_COMPROBANTES).upload(rutaStorage, archivo, {
+        upsert: false,
+        contentType: archivo.type || undefined,
+      });
       if (errorStorage) {
         console.error(errorStorage);
         return setError(MENSAJE_ERROR_BUCKET_COMPROBANTES);
@@ -508,7 +585,10 @@ export default function Page() {
           payload,
           raw: error,
         });
-        setErrorTecnico({ ...normalizarErrorTecnico(error), raw: { error, payload } });
+        setErrorTecnico({
+          ...normalizarErrorTecnico(error),
+          raw: { error, payload },
+        });
         console.warn('El archivo ya fue subido a Storage pero falló el insert de metadata.', { bucket: BUCKET_COMPROBANTES, ruta_storage: rutaStorage });
         return setError('No se pudo asociar el comprobante al gasto. Revisá el detalle técnico en desarrollo.');
       }
@@ -534,7 +614,11 @@ export default function Page() {
     if (comprobante.ruta_storage) {
       const { data, error } = await supabase.storage.from(BUCKET_COMPROBANTES).createSignedUrl(comprobante.ruta_storage, 60 * 10);
       if (!error && data?.signedUrl) return data.signedUrl;
-      console.warn('No se pudo generar signed URL para comprobante.', { comprobante_id: comprobante.id, ruta_storage: comprobante.ruta_storage, error });
+      console.warn('No se pudo generar signed URL para comprobante.', {
+        comprobante_id: comprobante.id,
+        ruta_storage: comprobante.ruta_storage,
+        error,
+      });
     }
     return comprobante.url_storage ?? comprobante.url_drive ?? null;
   }
@@ -551,7 +635,7 @@ export default function Page() {
     return 'Con comprobante';
   }
 
-  const comprobantesGastoPreview = useMemo(() => gastoPreviewId ? comprobantes.filter((c) => c.gasto_id === gastoPreviewId) : [], [comprobantes, gastoPreviewId]);
+  const comprobantesGastoPreview = useMemo(() => (gastoPreviewId ? comprobantes.filter((c) => c.gasto_id === gastoPreviewId) : []), [comprobantes, gastoPreviewId]);
   const comprobantePreview = comprobantesGastoPreview[indicePreview] ?? null;
 
   useEffect(() => {
@@ -571,113 +655,408 @@ export default function Page() {
         if (!cancelado) setErrorAccesoComprobante('Comprobante no disponible');
       });
 
-    return () => { cancelado = true; };
+    return () => {
+      cancelado = true;
+    };
   }, [comprobantePreview, grupoId]);
 
   const urlComprobantePreview = urlComprobanteFirmada;
 
-  return <section className="space-y-4">
-    <FeedbackToast tipo={error ? 'error' : mensajeExito ? 'ok' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensajeExito ?? mensajeComprobante} />
-    <h1 className="text-2xl font-semibold">Historial de gastos {filtros.estado_registro === 'anulados' ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Vista Anulados</span> : null}</h1>
-    {mensajeExito && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{mensajeExito}</p>}
-    {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
-    <ErrorTecnicoDesarrollo error={errorTecnico} />
+  return (
+    <section className="space-y-4">
+      <FeedbackToast tipo={error ? 'error' : mensajeExito ? 'ok' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensajeExito ?? mensajeComprobante} />
+      <h1 className="text-2xl font-semibold">Historial de gastos {filtros.estado_registro === 'anulados' ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Vista Anulados</span> : null}</h1>
+      {mensajeExito && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{mensajeExito}</p>}
+      {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+      <ErrorTecnicoDesarrollo error={errorTecnico} />
 
-    <div className="sf-card grid grid-cols-1 gap-2 p-3 md:grid-cols-3">
-      <input className="rounded-xl border px-3 py-2" placeholder="Buscar" value={filtros.busqueda} onChange={(e) => setFiltros((p) => ({ ...p, busqueda: e.target.value }))} />
-      <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_desde} onChange={(e) => setFiltros((p) => ({ ...p, fecha_desde: e.target.value }))} />
-      <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_hasta} onChange={(e) => setFiltros((p) => ({ ...p, fecha_hasta: e.target.value }))} />
-      {renderSelect('Categoría', filtros.categoria_id, categorias, (v) => setFiltros((p) => ({ ...p, categoria_id: v })))}
-      {renderSelect('Persona', filtros.persona_id, personas.map((p) => ({ id: p.id, nombre: `${p.nombre} ${p.apellido ?? ''}`.trim() })), (v) => setFiltros((p) => ({ ...p, persona_id: v })))}
-      {renderSelect('Medio de pago', filtros.medio_pago_id, mediosPago, (v) => setFiltros((p) => ({ ...p, medio_pago_id: v })))}
-      {renderSelect('Cuenta de tarjeta', filtros.cuenta_tarjeta_id, cuentasTarjeta.map((c) => ({ id: c.id, nombre: c.nombre_cuenta })), (v) => setFiltros((p) => ({ ...p, cuenta_tarjeta_id: v })))}
-      {renderSelect('Tarjeta física', filtros.tarjeta_fisica_id, tarjetasFisicas.map((t) => ({ id: t.id, nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta' })), (v) => setFiltros((p) => ({ ...p, tarjeta_fisica_id: v })))}
-      <select value={filtros.estado_registro} onChange={(e) => setFiltros((p) => ({ ...p, estado_registro: e.target.value as Filtros['estado_registro'] }))} className="rounded-xl border px-3 py-2 text-sm"><option value="activos">Activos / confirmados</option><option value="anulados">Anulados</option><option value="todos">Todos</option></select>
-    </div>
+      <div className="sf-card grid grid-cols-1 gap-2 p-3 md:grid-cols-3">
+        <input className="rounded-xl border px-3 py-2" placeholder="Buscar" value={filtros.busqueda} onChange={(e) => setFiltros((p) => ({ ...p, busqueda: e.target.value }))} />
+        <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_desde} onChange={(e) => setFiltros((p) => ({ ...p, fecha_desde: e.target.value }))} />
+        <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_hasta} onChange={(e) => setFiltros((p) => ({ ...p, fecha_hasta: e.target.value }))} />
+        {renderSelect('Categoría', filtros.categoria_id, categorias, (v) => setFiltros((p) => ({ ...p, categoria_id: v })))}
+        {renderSelect(
+          'Persona',
+          filtros.persona_id,
+          personas.map((p) => ({
+            id: p.id,
+            nombre: `${p.nombre} ${p.apellido ?? ''}`.trim(),
+          })),
+          (v) => setFiltros((p) => ({ ...p, persona_id: v })),
+        )}
+        {renderSelect('Medio de pago', filtros.medio_pago_id, mediosPago, (v) => setFiltros((p) => ({ ...p, medio_pago_id: v })))}
+        {renderSelect(
+          'Cuenta de tarjeta',
+          filtros.cuenta_tarjeta_id,
+          cuentasTarjeta.map((c) => ({ id: c.id, nombre: c.nombre_cuenta })),
+          (v) => setFiltros((p) => ({ ...p, cuenta_tarjeta_id: v })),
+        )}
+        {renderSelect(
+          'Tarjeta física',
+          filtros.tarjeta_fisica_id,
+          tarjetasFisicas.map((t) => ({
+            id: t.id,
+            nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta',
+          })),
+          (v) => setFiltros((p) => ({ ...p, tarjeta_fisica_id: v })),
+        )}
+        <select
+          value={filtros.estado_registro}
+          onChange={(e) =>
+            setFiltros((p) => ({
+              ...p,
+              estado_registro: e.target.value as Filtros['estado_registro'],
+            }))
+          }
+          className="rounded-xl border px-3 py-2 text-sm"
+        >
+          <option value="activos">Activos / confirmados</option>
+          <option value="anulados">Anulados</option>
+          <option value="todos">Todos</option>
+        </select>
+      </div>
 
-    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-      <div className="sf-card p-3 text-sm">Gastos encontrados: <strong>{gastosFiltrados.length}</strong></div>
-      <div className="sf-card p-3 text-sm">Total operativo: <strong>${totalOperativo.toFixed(2)}</strong></div>
-      <div className="sf-card p-3 text-sm">Total anulado: <strong>${totalAnulado.toFixed(2)}</strong></div>
-    </div>
-
-    <div className="sf-card overflow-x-auto"><table className="sf-responsive-table min-w-full text-sm"><tbody>{gastosFiltrados.map((gasto) => {
-      const cuotasDelGasto = cuotasPorGasto.get(gasto.id) ?? [];
-      const resumenCuotas = cuotasDelGasto.length > 0
-        ? (cuotasDelGasto.length === 1
-          ? etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas)
-          : `${etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas)} · +${cuotasDelGasto.length - 1}`)
-        : (esMedioTarjetaCredito(gasto.medio_pago_id) ? 'Tarjeta sin compromiso' : String(gasto.cantidad_cuotas));
-      return <tr key={gasto.id} className={`border-t ${gasto.estado_registro === 'anulado' ? 'text-slate-400' : ''}`}><td className="px-2 py-2">{gasto.fecha_gasto}</td><td className="px-2">{gasto.establecimiento}</td><td className="px-2">{nombresCategoria.get(gasto.categoria_id)}</td><td className="px-2">{nombresPersona.get(gasto.persona_id)}</td><td className="px-2">{nombresMedioPago.get(gasto.medio_pago_id)}</td><td className="px-2">{resumenCuotas}</td><td className="px-2">{(comprobantesPorGasto.get(gasto.id) ?? 0) > 0 ? <button type="button" onClick={() => { setGastoPreviewId(gasto.id); setIndicePreview(0); setComprobantePreviewAbierto(true); }} className="cursor-pointer rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 transition hover:bg-emerald-200">{etiquetaComprobanteGasto(gasto.id)}</button> : <span className="rounded bg-[var(--surface-3)] px-2 py-1 text-xs text-slate-600">Sin comprobante</span>}</td><td className="px-2">{gasto.estado_registro === 'anulado' ? <span className="rounded bg-rose-100 px-2 py-1 text-xs text-rose-700">Anulado</span> : null}</td><td className="px-2"><button onClick={() => setGastoEditando(gasto)} className="rounded border px-2 py-1">Editar</button>{gasto.estado_registro !== 'anulado' ? <button onClick={() => void anularGasto(gasto)} className="ml-2 rounded border border-rose-200 px-2 py-1 text-rose-700">Anular</button> : null}</td></tr>;
-    })}</tbody></table></div>
-
-    {comprobantePreviewAbierto ? <div className="fixed inset-0 z-50 flex items-end bg-slate-900/60 p-0 sm:items-center sm:justify-center sm:p-4">
-      <div className="sf-card w-full rounded-t-2xl p-4 sm:max-w-3xl sm:rounded-2xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Comprobante</h3>
-          <button type="button" onClick={() => setComprobantePreviewAbierto(false)} className="rounded-xl border px-3 py-1.5 text-sm">Cerrar</button>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+        <div className="sf-card p-3 text-sm">
+          Gastos encontrados: <strong>{gastosFiltrados.length}</strong>
         </div>
-        {comprobantePreview ? <div className="space-y-3">
-          <p className="truncate text-sm text-slate-700">{comprobantePreview.nombre_archivo ?? 'Archivo sin nombre'}</p>
-          {comprobantesGastoPreview.length > 1 ? <div className="flex flex-wrap gap-2">{comprobantesGastoPreview.map((item, index) => <button type="button" key={item.id} onClick={() => setIndicePreview(index)} className={`rounded-lg px-2 py-1 text-xs ${index === indicePreview ? 'bg-emerald-600 text-white' : 'border bg-[var(--surface-2)] text-slate-700'}`}>#{index + 1}</button>)}</div> : null}
-          <div className="max-h-[60vh] overflow-auto rounded-xl border bg-[var(--surface-2)] p-2">
-            {urlComprobantePreview ? (
-              esImagenTipoArchivo(comprobantePreview.tipo_archivo) ? <img src={urlComprobantePreview} alt={comprobantePreview.nombre_archivo ?? 'Comprobante'} className="mx-auto h-auto max-h-[55vh] w-auto rounded-lg object-contain" /> : (
-                esPdfTipoArchivo(comprobantePreview.tipo_archivo) ? <iframe title={comprobantePreview.nombre_archivo ?? 'Comprobante PDF'} src={urlComprobantePreview} className="h-[55vh] w-full rounded-lg" /> : <p className="p-4 text-sm text-slate-600">Formato no compatible para vista previa.</p>
-              )
-            ) : <p className="p-4 text-sm text-rose-700">{errorAccesoComprobante ?? 'No se pudo acceder al comprobante.'}</p>}
-          </div>
-          {urlComprobantePreview ? <a href={urlComprobantePreview} target="_blank" rel="noreferrer" className="inline-flex rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white">Abrir en nueva pestaña</a> : null}
-        </div> : <p className="text-sm text-slate-600">No hay comprobantes activos para este gasto.</p>}
+        <div className="sf-card p-3 text-sm">
+          Total operativo: <strong>${totalOperativo.toFixed(2)}</strong>
+        </div>
+        <div className="sf-card p-3 text-sm">
+          Total anulado: <strong>${totalAnulado.toFixed(2)}</strong>
+        </div>
       </div>
-    </div> : null}
 
-    {gastoEditando && <form onSubmit={guardarEdicion} className="sf-card space-y-2 p-4">
-      <h2 className="font-semibold">Editar gasto</h2>
-      {cuotasGastoEditando.length > 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Este gasto tiene cuotas generadas. Para corregir monto, fecha, medio de pago o cantidad de cuotas, anulá el gasto y cargalo nuevamente.</p>}
-      <label className="block text-sm font-medium">Fecha del gasto<input type="date" disabled={cuotasGastoEditando.length > 0} value={gastoEditando.fecha_gasto} onChange={(e) => setGastoEditando((p) => p ? { ...p, fecha_gasto: e.target.value } : null)} className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-[var(--surface-3)]" /></label>
-      <label className="block text-sm font-medium">Establecimiento<input value={gastoEditando.establecimiento} onChange={(e) => setGastoEditando((p) => p ? { ...p, establecimiento: e.target.value } : null)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
-      {renderSelect('Categoría', gastoEditando.categoria_id, categorias, (v) => setGastoEditando((p) => p ? { ...p, categoria_id: v } : null))}
-      {renderSelect('Persona', gastoEditando.persona_id, personas.map((p) => ({ id: p.id, nombre: `${p.nombre} ${p.apellido ?? ''}`.trim() })), (v) => setGastoEditando((p) => p ? { ...p, persona_id: v } : null))}
-      {renderSelect('Medio de pago', gastoEditando.medio_pago_id, mediosPago, (v) => setGastoEditando((p) => {
-        if (!p) return null;
-        const medioEsTarjeta = esMedioTarjetaCredito(v);
-        return { ...p, medio_pago_id: v, cuenta_tarjeta_id: medioEsTarjeta ? p.cuenta_tarjeta_id : null, tarjeta_fisica_id: medioEsTarjeta ? p.tarjeta_fisica_id : null, cantidad_cuotas: 1 };
-      }), gastoEditandoTieneCuotas)}
-      {gastoEditandoEsTarjeta ? (
-        <>
-          {!gastoEditandoTieneCuotas ? <p className="text-xs text-slate-600">Se registrará como tarjeta de crédito en 1 pago y se generará un pago único para el flujo mensual.</p> : null}
-          {renderSelect('Cuenta de tarjeta', gastoEditando.cuenta_tarjeta_id ?? '', cuentasTarjeta.map((c) => ({ id: c.id, nombre: c.nombre_cuenta })), (v) => setGastoEditando((p) => p ? { ...p, cuenta_tarjeta_id: v || null, tarjeta_fisica_id: null } : null), gastoEditandoTieneCuotas)}
-          {renderSelect('Tarjeta física', gastoEditando.tarjeta_fisica_id ?? '', tarjetasDisponiblesEdicion, (v) => setGastoEditando((p) => p ? { ...p, tarjeta_fisica_id: v || null } : null), gastoEditandoTieneCuotas)}
-        </>
+      <div className="sf-card overflow-x-auto">
+        <table className="sf-responsive-table min-w-full text-sm">
+          <tbody>
+            {gastosFiltrados.map((gasto) => {
+              const cuotasDelGasto = cuotasPorGasto.get(gasto.id) ?? [];
+              const resumenCuotas = cuotasDelGasto.length > 0 ? (cuotasDelGasto.length === 1 ? etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas) : `${etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas)} · +${cuotasDelGasto.length - 1}`) : esMedioTarjetaCredito(gasto.medio_pago_id) ? 'Tarjeta sin compromiso' : String(gasto.cantidad_cuotas);
+              return (
+                <tr key={gasto.id} className={`border-t ${gasto.estado_registro === 'anulado' ? 'text-slate-400' : ''}`}>
+                  <td className="px-2 py-2">{gasto.fecha_gasto}</td>
+                  <td className="px-2">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[var(--text-primary)]">{gasto.descripcion?.trim() || gasto.establecimiento}</p>
+                        {gasto.descripcion?.trim() ? <p className="truncate text-xs text-slate-500">{gasto.establecimiento}</p> : null}
+                      </div>
+                      <p className="shrink-0 text-right text-base font-bold tabular-nums text-[var(--text-primary)]">{formatearImporte(gasto.monto, gasto.moneda)}</p>
+                    </div>
+                  </td>
+                  <td className="px-2">{nombresCategoria.get(gasto.categoria_id)}</td>
+                  <td className="px-2">{nombresPersona.get(gasto.persona_id)}</td>
+                  <td className="px-2">{nombresMedioPago.get(gasto.medio_pago_id)}</td>
+                  <td className="px-2">{resumenCuotas}</td>
+                  <td className="px-2">
+                    {(comprobantesPorGasto.get(gasto.id) ?? 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGastoPreviewId(gasto.id);
+                          setIndicePreview(0);
+                          setComprobantePreviewAbierto(true);
+                        }}
+                        className="cursor-pointer rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 transition hover:bg-emerald-200"
+                      >
+                        {etiquetaComprobanteGasto(gasto.id)}
+                      </button>
+                    ) : (
+                      <span className="rounded bg-[var(--surface-3)] px-2 py-1 text-xs text-slate-600">Sin comprobante</span>
+                    )}
+                  </td>
+                  <td className="px-2">{gasto.estado_registro === 'anulado' ? <span className="rounded bg-rose-100 px-2 py-1 text-xs text-rose-700">Anulado</span> : null}</td>
+                  <td className="px-2">
+                    <button onClick={() => setGastoEditando(gasto)} className="rounded border px-2 py-1">
+                      Editar
+                    </button>
+                    {gasto.estado_registro !== 'anulado' ? (
+                      <button onClick={() => void anularGasto(gasto)} className="ml-2 rounded border border-rose-200 px-2 py-1 text-rose-700">
+                        Anular
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {comprobantePreviewAbierto ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-slate-900/60 p-0 sm:items-center sm:justify-center sm:p-4">
+          <div className="sf-card w-full rounded-t-2xl p-4 sm:max-w-3xl sm:rounded-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Comprobante</h3>
+              <button type="button" onClick={() => setComprobantePreviewAbierto(false)} className="rounded-xl border px-3 py-1.5 text-sm">
+                Cerrar
+              </button>
+            </div>
+            {comprobantePreview ? (
+              <div className="space-y-3">
+                <p className="truncate text-sm text-slate-700">{comprobantePreview.nombre_archivo ?? 'Archivo sin nombre'}</p>
+                {comprobantesGastoPreview.length > 1 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {comprobantesGastoPreview.map((item, index) => (
+                      <button type="button" key={item.id} onClick={() => setIndicePreview(index)} className={`rounded-lg px-2 py-1 text-xs ${index === indicePreview ? 'bg-emerald-600 text-white' : 'border bg-[var(--surface-2)] text-slate-700'}`}>
+                        #{index + 1}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="max-h-[60vh] overflow-auto rounded-xl border bg-[var(--surface-2)] p-2">{urlComprobantePreview ? esImagenTipoArchivo(comprobantePreview.tipo_archivo) ? <img src={urlComprobantePreview} alt={comprobantePreview.nombre_archivo ?? 'Comprobante'} className="mx-auto h-auto max-h-[55vh] w-auto rounded-lg object-contain" /> : esPdfTipoArchivo(comprobantePreview.tipo_archivo) ? <iframe title={comprobantePreview.nombre_archivo ?? 'Comprobante PDF'} src={urlComprobantePreview} className="h-[55vh] w-full rounded-lg" /> : <p className="p-4 text-sm text-slate-600">Formato no compatible para vista previa.</p> : <p className="p-4 text-sm text-rose-700">{errorAccesoComprobante ?? 'No se pudo acceder al comprobante.'}</p>}</div>
+                {urlComprobantePreview ? (
+                  <a href={urlComprobantePreview} target="_blank" rel="noreferrer" className="inline-flex rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white">
+                    Abrir en nueva pestaña
+                  </a>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-600">No hay comprobantes activos para este gasto.</p>
+            )}
+          </div>
+        </div>
       ) : null}
-      <label className="block text-sm font-medium">Monto<input type="number" disabled={cuotasGastoEditando.length > 0} value={gastoEditando.monto} onChange={(e) => setGastoEditando((p) => p ? { ...p, monto: Number(e.target.value) } : null)} className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-[var(--surface-3)]" /></label>
-      <label className="block text-sm font-medium">Descripción<textarea value={gastoEditando.descripcion ?? ''} onChange={(e) => setGastoEditando((p) => p ? { ...p, descripcion: e.target.value } : null)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
-      <label className="block text-sm font-medium">Observaciones<textarea value={gastoEditando.observaciones ?? ''} onChange={(e) => setGastoEditando((p) => p ? { ...p, observaciones: e.target.value } : null)} className="mt-1 w-full rounded-xl border px-3 py-2" /></label>
-      {gastoEditandoTieneCuotas ? <p className="text-xs text-slate-500">Medio de pago, fecha y monto están bloqueados para mantener consistencia con cuotas generadas.</p> : null}
-      <button className="rounded-xl bg-emerald-600 px-3 py-2 text-white">Guardar cambios</button>
 
-      <div className="space-y-2 border-t pt-3"><h3 className="font-medium">Comprobante</h3><p className="text-xs text-slate-600">Opcional: adjuntá una foto, imagen o PDF del ticket/factura.</p><p className="text-xs text-slate-500">También podés pegar una imagen copiada desde WhatsApp.</p><div tabIndex={0} onPaste={manejarPegadoComprobante} onDragOver={(event) => { event.preventDefault(); setArrastrandoComprobante(true); }} onDragLeave={() => setArrastrandoComprobante(false)} onDrop={manejarDropComprobante} className={`rounded-xl border border-dashed p-3 ${arrastrandoComprobante ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-[var(--surface-2)]'}`}><p className="text-xs text-slate-600">Arrastrá una imagen/PDF acá o pegá una imagen copiada.</p><div className="mt-2 grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => inputCamaraRef.current?.click()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">Tomar foto del comprobante</button><button type="button" onClick={() => inputSubirRef.current?.click()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">Subir imagen o PDF</button><button type="button" onClick={() => void pegarComprobanteDesdeBoton()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">Pegar imagen copiada</button></div><input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={manejarCambioArchivo} /><input ref={inputSubirRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={manejarCambioArchivo} /></div>{mensajeComprobante ? <p className="text-xs text-slate-500">{mensajeComprobante}</p> : null}{comprobanteNuevo ? <div className="rounded-lg border p-2 text-xs"><p className="truncate"><strong>Archivo:</strong> {comprobanteNuevo.name}</p><p><strong>Tipo:</strong> {comprobanteNuevo.type || 'Sin tipo'}</p><p><strong>Tamaño:</strong> {formatearTamanoArchivo(comprobanteNuevo.size)}</p><div className="mt-2 flex gap-2"><button type="button" onClick={() => void agregarComprobanteAGasto(gastoEditando.id, comprobanteNuevo)} className="rounded bg-emerald-600 px-2 py-1 text-white">Adjuntar comprobante</button><button type="button" onClick={() => setComprobanteNuevo(null)} className="rounded border px-2 py-1">Quitar comprobante</button></div></div> : <p className="text-xs text-slate-500">Sin comprobante seleccionado.</p>}{comprobantesGastoEditando.length === 0 ? <p className="text-xs text-slate-500">Sin comprobantes asociados.</p> : comprobantesGastoEditando.map((comprobante) => <div key={comprobante.id} className="rounded-lg border p-2 text-xs"><p className="font-medium">{comprobante.nombre_archivo ?? 'Archivo sin nombre'}</p><p className="text-slate-500">{comprobante.tipo_archivo ?? 'tipo MIME sin informar'}</p>{!comprobanteDisponible(comprobante) ? <p className="text-amber-700">Comprobante no disponible</p> : null}<button type="button" onClick={() => { setGastoPreviewId(comprobante.gasto_id); setIndicePreview(Math.max(0, comprobantesGastoEditando.findIndex((item) => item.id === comprobante.id))); setComprobantePreviewAbierto(true); }} className="text-emerald-700 underline">Abrir / descargar</button></div>)}</div>
+      {gastoEditando && (
+        <form onSubmit={guardarEdicion} className="sf-card space-y-2 p-4">
+          <h2 className="font-semibold">Editar gasto</h2>
+          {cuotasGastoEditando.length > 0 && <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">Este gasto tiene cuotas generadas. Para corregir monto, fecha, medio de pago o cantidad de cuotas, anulá el gasto y cargalo nuevamente.</p>}
+          <label className="block text-sm font-medium">
+            Fecha del gasto
+            <input type="date" disabled={cuotasGastoEditando.length > 0} value={gastoEditando.fecha_gasto} onChange={(e) => setGastoEditando((p) => (p ? { ...p, fecha_gasto: e.target.value } : null))} className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-[var(--surface-3)]" />
+          </label>
+          <label className="block text-sm font-medium">
+            Establecimiento
+            <input value={gastoEditando.establecimiento} onChange={(e) => setGastoEditando((p) => (p ? { ...p, establecimiento: e.target.value } : null))} className="mt-1 w-full rounded-xl border px-3 py-2" />
+          </label>
+          {renderSelect('Categoría', gastoEditando.categoria_id, categorias, (v) => setGastoEditando((p) => (p ? { ...p, categoria_id: v } : null)))}
+          {renderSelect(
+            'Persona',
+            gastoEditando.persona_id,
+            personas.map((p) => ({
+              id: p.id,
+              nombre: `${p.nombre} ${p.apellido ?? ''}`.trim(),
+            })),
+            (v) => setGastoEditando((p) => (p ? { ...p, persona_id: v } : null)),
+          )}
+          {renderSelect(
+            'Medio de pago',
+            gastoEditando.medio_pago_id,
+            mediosPago,
+            (v) =>
+              setGastoEditando((p) => {
+                if (!p) return null;
+                const medioEsTarjeta = esMedioTarjetaCredito(v);
+                return {
+                  ...p,
+                  medio_pago_id: v,
+                  cuenta_tarjeta_id: medioEsTarjeta ? p.cuenta_tarjeta_id : null,
+                  tarjeta_fisica_id: medioEsTarjeta ? p.tarjeta_fisica_id : null,
+                  cantidad_cuotas: 1,
+                };
+              }),
+            gastoEditandoTieneCuotas,
+          )}
+          {gastoEditandoEsTarjeta ? (
+            <>
+              {!gastoEditandoTieneCuotas ? <p className="text-xs text-slate-600">Se registrará como tarjeta de crédito en 1 pago y se generará un pago único para el flujo mensual.</p> : null}
+              {renderSelect(
+                'Cuenta de tarjeta',
+                gastoEditando.cuenta_tarjeta_id ?? '',
+                cuentasTarjeta.map((c) => ({
+                  id: c.id,
+                  nombre: c.nombre_cuenta,
+                })),
+                (v) =>
+                  setGastoEditando((p) =>
+                    p
+                      ? {
+                          ...p,
+                          cuenta_tarjeta_id: v || null,
+                          tarjeta_fisica_id: null,
+                        }
+                      : null,
+                  ),
+                gastoEditandoTieneCuotas,
+              )}
+              {renderSelect('Tarjeta física', gastoEditando.tarjeta_fisica_id ?? '', tarjetasDisponiblesEdicion, (v) => setGastoEditando((p) => (p ? { ...p, tarjeta_fisica_id: v || null } : null)), gastoEditandoTieneCuotas)}
+            </>
+          ) : null}
+          <label className="block text-sm font-medium">
+            Monto
+            <input type="number" disabled={cuotasGastoEditando.length > 0} value={gastoEditando.monto} onChange={(e) => setGastoEditando((p) => (p ? { ...p, monto: Number(e.target.value) } : null))} className="mt-1 w-full rounded-xl border px-3 py-2 disabled:bg-[var(--surface-3)]" />
+          </label>
+          <label className="block text-sm font-medium">
+            Descripción
+            <textarea value={gastoEditando.descripcion ?? ''} onChange={(e) => setGastoEditando((p) => (p ? { ...p, descripcion: e.target.value } : null))} className="mt-1 w-full rounded-xl border px-3 py-2" />
+          </label>
+          <label className="block text-sm font-medium">
+            Observaciones
+            <textarea value={gastoEditando.observaciones ?? ''} onChange={(e) => setGastoEditando((p) => (p ? { ...p, observaciones: e.target.value } : null))} className="mt-1 w-full rounded-xl border px-3 py-2" />
+          </label>
+          {gastoEditandoTieneCuotas ? <p className="text-xs text-slate-500">Medio de pago, fecha y monto están bloqueados para mantener consistencia con cuotas generadas.</p> : null}
+          <button className="rounded-xl bg-emerald-600 px-3 py-2 text-white">Guardar cambios</button>
 
-      <div className="space-y-2 border-t pt-3"><h3 className="font-medium">Cuotas asociadas</h3>
-        {cuotasGastoEditando.map((cuota) => <div key={cuota.id} className="rounded-xl border p-2 text-sm">
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs md:grid-cols-3">
-            <p><strong>Pago:</strong> {cuota.total_cuotas === 1 ? "Pago único" : `${cuota.numero_cuota}/${cuota.total_cuotas}`}</p>
-            <p><strong>Monto:</strong> ${cuota.monto_cuota.toFixed(2)}</p>
-            <p><strong>Estado:</strong> {cuota.estado}</p>
-            <p><strong>Origen:</strong> {cuota.origen_cuota}</p>
+          <div className="space-y-2 border-t pt-3">
+            <h3 className="font-medium">Comprobante</h3>
+            <p className="text-xs text-slate-600">Opcional: adjuntá una foto, imagen o PDF del ticket/factura.</p>
+            <p className="text-xs text-slate-500">También podés pegar una imagen copiada desde WhatsApp.</p>
+            <div
+              tabIndex={0}
+              onPaste={manejarPegadoComprobante}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setArrastrandoComprobante(true);
+              }}
+              onDragLeave={() => setArrastrandoComprobante(false)}
+              onDrop={manejarDropComprobante}
+              className={`rounded-xl border border-dashed p-3 ${arrastrandoComprobante ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-[var(--surface-2)]'}`}
+            >
+              <p className="text-xs text-slate-600">Arrastrá una imagen/PDF acá o pegá una imagen copiada.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                <button type="button" onClick={() => inputCamaraRef.current?.click()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">
+                  Tomar foto del comprobante
+                </button>
+                <button type="button" onClick={() => inputSubirRef.current?.click()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">
+                  Subir imagen o PDF
+                </button>
+                <button type="button" onClick={() => void pegarComprobanteDesdeBoton()} className="rounded-xl border bg-[var(--surface)] px-3 py-2 text-xs font-medium">
+                  Pegar imagen copiada
+                </button>
+              </div>
+              <input ref={inputCamaraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={manejarCambioArchivo} />
+              <input ref={inputSubirRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={manejarCambioArchivo} />
+            </div>
+            {mensajeComprobante ? <p className="text-xs text-slate-500">{mensajeComprobante}</p> : null}
+            {comprobanteNuevo ? (
+              <div className="rounded-lg border p-2 text-xs">
+                <p className="truncate">
+                  <strong>Archivo:</strong> {comprobanteNuevo.name}
+                </p>
+                <p>
+                  <strong>Tipo:</strong> {comprobanteNuevo.type || 'Sin tipo'}
+                </p>
+                <p>
+                  <strong>Tamaño:</strong> {formatearTamanoArchivo(comprobanteNuevo.size)}
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" onClick={() => void agregarComprobanteAGasto(gastoEditando.id, comprobanteNuevo)} className="rounded bg-emerald-600 px-2 py-1 text-white">
+                    Adjuntar comprobante
+                  </button>
+                  <button type="button" onClick={() => setComprobanteNuevo(null)} className="rounded border px-2 py-1">
+                    Quitar comprobante
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Sin comprobante seleccionado.</p>
+            )}
+            {comprobantesGastoEditando.length === 0 ? (
+              <p className="text-xs text-slate-500">Sin comprobantes asociados.</p>
+            ) : (
+              comprobantesGastoEditando.map((comprobante) => (
+                <div key={comprobante.id} className="rounded-lg border p-2 text-xs">
+                  <p className="font-medium">{comprobante.nombre_archivo ?? 'Archivo sin nombre'}</p>
+                  <p className="text-slate-500">{comprobante.tipo_archivo ?? 'tipo MIME sin informar'}</p>
+                  {!comprobanteDisponible(comprobante) ? <p className="text-amber-700">Comprobante no disponible</p> : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGastoPreviewId(comprobante.gasto_id);
+                      setIndicePreview(
+                        Math.max(
+                          0,
+                          comprobantesGastoEditando.findIndex((item) => item.id === comprobante.id),
+                        ),
+                      );
+                      setComprobantePreviewAbierto(true);
+                    }}
+                    className="text-emerald-700 underline"
+                  >
+                    Abrir / descargar
+                  </button>
+                </div>
+              ))
+            )}
           </div>
-          {ESTADOS_EDITABLES_CUOTA.has(cuota.estado) ? <div className="mt-2 grid gap-2 md:grid-cols-2">
-            <input value={cuota.periodo_pago_estimado} onChange={(e) => setCuotas((prev) => prev.map((item) => item.id === cuota.id ? { ...item, periodo_pago_estimado: e.target.value } : item))} className="rounded border px-2 py-1 text-xs" />
-            <input value={cuota.observaciones ?? ''} onChange={(e) => setCuotas((prev) => prev.map((item) => item.id === cuota.id ? { ...item, observaciones: e.target.value } : item))} className="rounded border px-2 py-1 text-xs" placeholder="Observaciones" />
-            <button type="button" onClick={() => void actualizarCuotaAsociada(cuota, { periodo_pago_estimado: cuota.periodo_pago_estimado, observaciones: cuota.observaciones ?? null })} className="rounded bg-emerald-600 px-2 py-1 text-xs text-white md:col-span-2">Guardar cuota</button>
-          </div> : <p className="mt-2 text-xs text-slate-500">No editable (pagada/cancelada).</p>}
-        </div>)}
-      </div>
-    </form>}
-  </section>;
+
+          <div className="space-y-2 border-t pt-3">
+            <h3 className="font-medium">Cuotas asociadas</h3>
+            {cuotasGastoEditando.map((cuota) => (
+              <div key={cuota.id} className="rounded-xl border p-2 text-sm">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs md:grid-cols-3">
+                  <p>
+                    <strong>Pago:</strong> {cuota.total_cuotas === 1 ? 'Pago único' : `${cuota.numero_cuota}/${cuota.total_cuotas}`}
+                  </p>
+                  <p>
+                    <strong>Monto:</strong> ${cuota.monto_cuota.toFixed(2)}
+                  </p>
+                  <p>
+                    <strong>Estado:</strong> {cuota.estado}
+                  </p>
+                  <p>
+                    <strong>Origen:</strong> {cuota.origen_cuota}
+                  </p>
+                </div>
+                {ESTADOS_EDITABLES_CUOTA.has(cuota.estado) ? (
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <input
+                      value={cuota.periodo_pago_estimado}
+                      onChange={(e) =>
+                        setCuotas((prev) =>
+                          prev.map((item) =>
+                            item.id === cuota.id
+                              ? {
+                                  ...item,
+                                  periodo_pago_estimado: e.target.value,
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                      className="rounded border px-2 py-1 text-xs"
+                    />
+                    <input value={cuota.observaciones ?? ''} onChange={(e) => setCuotas((prev) => prev.map((item) => (item.id === cuota.id ? { ...item, observaciones: e.target.value } : item)))} className="rounded border px-2 py-1 text-xs" placeholder="Observaciones" />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void actualizarCuotaAsociada(cuota, {
+                          periodo_pago_estimado: cuota.periodo_pago_estimado,
+                          observaciones: cuota.observaciones ?? null,
+                        })
+                      }
+                      className="rounded bg-emerald-600 px-2 py-1 text-xs text-white md:col-span-2"
+                    >
+                      Guardar cuota
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">No editable (pagada/cancelada).</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </form>
+      )}
+    </section>
+  );
 }
 
 function renderSelect(label: string, value: string, options: OpcionBase[], onChange: (value: string) => void, disabled = false) {
-  return <label className="block text-sm font-medium">{label}<select aria-label={label} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-[var(--surface-3)]"><option value="">Seleccionar</option>{options.map((option) => <option key={option.id} value={option.id}>{option.nombre}</option>)}</select></label>;
+  return (
+    <label className="block text-sm font-medium">
+      {label}
+      <select aria-label={label} disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-[var(--surface-3)]">
+        <option value="">Seleccionar</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.nombre}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
