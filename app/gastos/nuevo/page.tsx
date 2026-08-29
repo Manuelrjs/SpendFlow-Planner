@@ -104,6 +104,14 @@ function formatearTamanoArchivo(tamano: number) {
   return `${(tamano / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function convertirMonto(valor: string) {
+  const valorNormalizado = valor.trim().replace(',', '.');
+  if (!/^\d+(?:\.\d+)?$/.test(valorNormalizado)) return null;
+
+  const monto = Number(valorNormalizado);
+  return Number.isFinite(monto) ? monto : null;
+}
+
 function crearNombreComprobantePegado() {
   const fecha = new Date();
   const yyyy = fecha.getFullYear();
@@ -510,7 +518,8 @@ export default function Page() {
     setMensaje(null);
     setAdvertencia(null);
     if (!grupoId) return setError('No se pudo cargar el grupo activo.');
-    const monto = Number(formulario.monto);
+    const monto = convertirMonto(formulario.monto);
+    if (monto === null) return setError('Ingresá un monto válido. Podés usar coma o punto para los decimales.');
     if (!(monto > 0)) return setError('El monto debe ser mayor a 0.');
     if (!formulario.establecimiento.trim()) return setError('El establecimiento es obligatorio.');
     if (!formulario.fecha_gasto) return setError('La fecha es obligatoria.');
@@ -702,7 +711,8 @@ export default function Page() {
       <form onSubmit={guardar} className="sf-card flex flex-col gap-4 p-4 sm:p-5">
         <div>
           <label className="text-sm font-medium">Monto *{etiquetaIA('monto')}</label>
-          <input value={formulario.monto} onChange={(e) => editarCampo('monto', { monto: e.target.value })} inputMode="decimal" className="mt-1 w-full rounded-xl border px-4 py-3 text-2xl font-semibold" placeholder="0,00" />
+          <input value={formulario.monto} onChange={(e) => editarCampo('monto', { monto: e.target.value })} inputMode="decimal" lang="es-AR" className="mt-1 w-full rounded-xl border px-4 py-3 text-2xl font-semibold" placeholder="0,00" aria-describedby="ayuda-monto" />
+          <p id="ayuda-monto" className="mt-1 text-xs text-slate-500">Podés usar coma o punto para los decimales.</p>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <input value={formulario.moneda} onChange={(e) => editarCampo('moneda', { moneda: e.target.value })} className="rounded-xl border px-3 py-2" />
