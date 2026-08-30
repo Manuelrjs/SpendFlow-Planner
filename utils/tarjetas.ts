@@ -144,6 +144,31 @@ export function ordenarCalendariosPorCierre(
   });
 }
 
+export function determinarPeriodoCalendarioParaFecha(params: {
+  fecha_gasto: FechaEntrada;
+  cuenta_tarjeta_id: string;
+  calendarios: CalendarioTarjeta[];
+  periodo_estimado: string;
+}): string {
+  const fechaGasto = normalizarFecha(params.fecha_gasto);
+  const calendariosDeCuenta = ordenarCalendariosPorCierre(
+    params.calendarios.filter((calendario) => calendario.cuenta_tarjeta_id === params.cuenta_tarjeta_id),
+  );
+  const calendarioDisponible = calendariosDeCuenta.find(
+    (calendario) => normalizarFecha(calendario.fecha_cierre).getTime() >= fechaGasto.getTime(),
+  );
+
+  if (calendarioDisponible) return calendarioDisponible.periodo_resumen;
+  if (calendariosDeCuenta.length === 0) return params.periodo_estimado;
+
+  const ultimoPeriodo = calendariosDeCuenta[calendariosDeCuenta.length - 1].periodo_resumen;
+  const periodoSiguiente = sumarMesesPeriodo(ultimoPeriodo, 1);
+
+  // El calendario real tiene prioridad sobre el día habitual. Si el último cierre
+  // ya pasó, como mínimo hay que crear el período inmediatamente siguiente.
+  return periodoSiguiente > params.periodo_estimado ? periodoSiguiente : params.periodo_estimado;
+}
+
 function formatearFechaISO(fecha: FechaEntrada): string {
   const fechaNormalizada = normalizarFecha(fecha);
   return fechaNormalizada.toISOString().slice(0, 10);

@@ -8,7 +8,7 @@ import { comprimirImagenComprobante } from '@/lib/comprobantes-imagen';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
-import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, CalendarioTarjeta } from '@/utils/tarjetas';
+import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, determinarPeriodoCalendarioParaFecha, CalendarioTarjeta } from '@/utils/tarjetas';
 import { obtenerOCrearCalendarioEstimado } from '@/lib/calendario-tarjetas';
 
 type Gasto = {
@@ -394,7 +394,13 @@ export default function Page() {
           dia_cierre_habitual: cuenta.dia_cierre_habitual,
           dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento,
         });
-        const calendarioBase = await asegurarCalendarioConversion(cuenta, calculoBase.periodo_resumen);
+        const periodoCalendarioBase = determinarPeriodoCalendarioParaFecha({
+          fecha_gasto: gastoEditando.fecha_gasto,
+          cuenta_tarjeta_id: cuenta.id,
+          calendarios,
+          periodo_estimado: calculoBase.periodo_resumen,
+        });
+        const calendarioBase = await asegurarCalendarioConversion(cuenta, periodoCalendarioBase);
         const resultadoPeriodo = calcularPeriodoTarjeta({
           fecha_gasto: gastoEditando.fecha_gasto,
           cuenta_tarjeta_id: cuenta.id,

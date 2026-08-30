@@ -10,7 +10,7 @@ import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { FeedbackToast } from '@/components/feedback-toast';
 import { normalizarErrorTecnico, type ErrorTecnico } from '@/lib/errores';
 import { DatosComprobanteSugeridos, extraerDatosComprobante } from '@/lib/ia/extraer-comprobante';
-import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, formatearPeriodoDesdeFecha, CalendarioTarjeta, sumarMesesPeriodo } from '@/utils/tarjetas';
+import { calcularPeriodoResumenYVencimiento, calcularPeriodoTarjeta, determinarPeriodoCalendarioParaFecha, formatearPeriodoDesdeFecha, CalendarioTarjeta, sumarMesesPeriodo } from '@/utils/tarjetas';
 import { obtenerOCrearCalendarioEstimado } from '@/lib/calendario-tarjetas';
 
 type MedioPago = {
@@ -558,7 +558,13 @@ export default function Page() {
           dia_cierre_habitual: cuenta.dia_cierre_habitual,
           dias_hasta_vencimiento: cuenta.dias_hasta_vencimiento,
         });
-        const calendarioBase = await asegurarCalendario(cuenta, calculoBase.periodo_resumen);
+        const periodoCalendarioBase = determinarPeriodoCalendarioParaFecha({
+          fecha_gasto: formulario.fecha_gasto,
+          cuenta_tarjeta_id: cuenta.id,
+          calendarios,
+          periodo_estimado: calculoBase.periodo_resumen,
+        });
+        const calendarioBase = await asegurarCalendario(cuenta, periodoCalendarioBase);
         usaronEstimados ||= calendarioBase.generado || calendarioBase.calendario.estado_calendario === 'estimado';
         const resultado = calcularPeriodoTarjeta({
           fecha_gasto: formulario.fecha_gasto,

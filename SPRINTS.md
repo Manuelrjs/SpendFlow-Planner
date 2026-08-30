@@ -25,6 +25,10 @@ Validar el flujo principal de punta a punta en producción, empezando por login,
 
 Completar QA funcional para confirmar que no haya errores bloqueantes ni fugas visibles de datos entre grupos.
 
+## Hallazgos resueltos durante QA
+
+- Corregida la creación automática del período siguiente al registrar o convertir un gasto de tarjeta con fecha posterior al último cierre real cargado.
+
 ## Validación
 
 - Probar login y cierre de sesión.
