@@ -143,7 +143,8 @@ function etiquetaCuota(numeroCuota: number, totalCuotas: number) {
   return totalCuotas === 1 ? 'Pago único' : `${numeroCuota}/${totalCuotas}`;
 }
 
-export default function Page() {
+export default function Page({ searchParams }: { searchParams: { actualizar?: string } }) {
+  const actualizacionSolicitada = searchParams.actualizar;
   const [grupoId, setGrupoId] = useState<string | null>(null);
   const [usuarioEmail, setUsuarioEmail] = useState<string | null>(null);
   const [gastos, setGastos] = useState<Gasto[]>([]);
@@ -189,7 +190,7 @@ export default function Page() {
   useEffect(() => {
     if (!grupoId) return;
     void cargarDatos();
-  }, [grupoId]);
+  }, [grupoId, actualizacionSolicitada]);
 
   const nombresCategoria = useMemo(() => new Map(categorias.map((c) => [c.id, c.nombre])), [categorias]);
   const nombresMedioPago = useMemo(() => new Map(mediosPago.map((m) => [m.id, m.nombre])), [mediosPago]);

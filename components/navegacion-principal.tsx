@@ -28,6 +28,7 @@ const gruposEnlaces: GrupoEnlaces[] = [
 ];
 const enlacesPrincipales = [gruposEnlaces[0].enlaces[0], gruposEnlaces[0].enlaces[2], gruposEnlaces[0].enlaces[1], gruposEnlaces[0].enlaces[3]];
 const enlacesMas = [gruposEnlaces[0].enlaces[4], ...gruposEnlaces[1].enlaces, ...gruposEnlaces[2].enlaces];
+const CLAVE_ACTUALIZACION_GASTOS = 'spendflow:gastos-actualizados-en';
 
 function Icono({ nombre }: { nombre: IconoNombre }) {
   const trazos: Record<IconoNombre, React.ReactNode> = {
@@ -63,17 +64,24 @@ export function NavegacionPrincipal() {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
   const cerrarSesion = async () => { await cerrarSesionAuth(); router.replace('/login'); };
+  const abrirEnlace = (enlace: Enlace) => {
+    if (enlace.href !== '/gastos') return;
+    const actualizadosEn = sessionStorage.getItem(CLAVE_ACTUALIZACION_GASTOS);
+    if (!actualizadosEn) return;
+    sessionStorage.removeItem(CLAVE_ACTUALIZACION_GASTOS);
+    router.push(`/gastos?actualizar=${encodeURIComponent(actualizadosEn)}`);
+  };
   const nombreGrupo = perfil?.grupo_nombre ?? 'Preparando grupo...'; const email = session?.user.email ?? 'Sesión activa';
 
   return <>
     <aside className="sf-sidebar">
       <div className="sf-sidebar-brand"><div className="sf-brand"><LogoMarca /><div><p>SpendFlow Planner</p><span>Control y flujo futuro</span></div></div><div className="sf-context-card"><span>Grupo activo</span><strong>{nombreGrupo}</strong><small>{email}</small></div></div>
-      <nav className="sf-sidebar-nav" aria-label="Navegación principal">{gruposEnlaces.map((grupo) => <div key={grupo.titulo} className="sf-nav-group"><p>{grupo.titulo}</p><div>{grupo.enlaces.map((enlace) => <Link key={enlace.href} href={enlace.href} className={`sf-nav-link ${estaActivo(enlace.href) ? 'is-active' : ''}`}><Icono nombre={enlace.icono} /><span>{enlace.etiqueta}</span></Link>)}</div></div>)}</nav>
+      <nav className="sf-sidebar-nav" aria-label="Navegación principal">{gruposEnlaces.map((grupo) => <div key={grupo.titulo} className="sf-nav-group"><p>{grupo.titulo}</p><div>{grupo.enlaces.map((enlace) => <Link key={enlace.href} href={enlace.href} onClick={(evento) => { if (enlace.href === '/gastos' && sessionStorage.getItem(CLAVE_ACTUALIZACION_GASTOS)) { evento.preventDefault(); abrirEnlace(enlace); } }} className={`sf-nav-link ${estaActivo(enlace.href) ? 'is-active' : ''}`}><Icono nombre={enlace.icono} /><span>{enlace.etiqueta}</span></Link>)}</div></div>)}</nav>
       <div className="sf-sidebar-footer"><SelectorTema /><button onClick={cerrarSesion} className="sf-signout">Cerrar sesión</button></div>
     </aside>
 
     <header className="sf-mobile-header"><div className="sf-brand"><LogoMarca /><div><p>SpendFlow</p><span>{nombreGrupo}</span></div></div><Link href="/configuracion/grupo" className="sf-mobile-group" aria-label="Abrir grupo activo">Grupo</Link></header>
-    <nav className="sf-bottom-nav" aria-label="Navegación móvil"><ul>{enlacesPrincipales.map((enlace) => <li key={enlace.href}><Link href={enlace.href} className={`${estaActivo(enlace.href) ? 'is-active' : ''} ${enlace.href === '/gastos/nuevo' ? 'is-primary' : ''}`}><Icono nombre={enlace.icono} /><span>{enlace.etiqueta === 'Nuevo gasto' ? 'Nuevo' : enlace.etiqueta === 'Flujo mensual' ? 'Flujo' : enlace.etiqueta}</span></Link></li>)}<li><button type="button" className={masAbierto || enlacesMas.some((enlace) => estaActivo(enlace.href)) ? 'is-active' : ''} onClick={() => setMasAbierto(true)} aria-haspopup="dialog" aria-expanded={masAbierto}><Icono nombre="mas" /><span>Más</span></button></li></ul></nav>
+    <nav className="sf-bottom-nav" aria-label="Navegación móvil"><ul>{enlacesPrincipales.map((enlace) => <li key={enlace.href}><Link href={enlace.href} onClick={(evento) => { if (enlace.href === '/gastos' && sessionStorage.getItem(CLAVE_ACTUALIZACION_GASTOS)) { evento.preventDefault(); abrirEnlace(enlace); } }} className={`${estaActivo(enlace.href) ? 'is-active' : ''} ${enlace.href === '/gastos/nuevo' ? 'is-primary' : ''}`}><Icono nombre={enlace.icono} /><span>{enlace.etiqueta === 'Nuevo gasto' ? 'Nuevo' : enlace.etiqueta === 'Flujo mensual' ? 'Flujo' : enlace.etiqueta}</span></Link></li>)}<li><button type="button" className={masAbierto || enlacesMas.some((enlace) => estaActivo(enlace.href)) ? 'is-active' : ''} onClick={() => setMasAbierto(true)} aria-haspopup="dialog" aria-expanded={masAbierto}><Icono nombre="mas" /><span>Más</span></button></li></ul></nav>
 
     {masAbierto ? <div className="sf-drawer-backdrop" onClick={() => setMasAbierto(false)}><section className="sf-drawer" role="dialog" aria-modal="true" aria-label="Más opciones" onClick={(evento) => evento.stopPropagation()}><header className="sf-drawer-header"><div><p>Más opciones</p><span>{nombreGrupo} · {email}</span></div><button type="button" className="sf-drawer-close" onClick={() => setMasAbierto(false)} aria-label="Cerrar menú">×</button></header><div className="sf-drawer-body"><nav className="sf-drawer-grid">{enlacesMas.map((enlace) => <Link key={enlace.href} href={enlace.href} className={`sf-drawer-link ${estaActivo(enlace.href) ? 'is-active' : ''}`}><Icono nombre={enlace.icono} /><span>{enlace.etiqueta}</span></Link>)}</nav><div className="sf-drawer-actions"><SelectorTema /><button type="button" onClick={cerrarSesion} className="sf-drawer-signout">Cerrar sesión</button></div></div></section></div> : null}
   </>;
