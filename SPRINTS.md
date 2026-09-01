@@ -28,6 +28,7 @@ Completar QA funcional para confirmar que no haya errores bloqueantes ni fugas v
 ## Hallazgos resueltos durante QA
 
 - Corregida la creación automática del período siguiente al registrar o convertir un gasto de tarjeta con fecha posterior al último cierre real cargado.
+- Corregida la actualización del historial al abrir Gastos inmediatamente después de registrar un gasto nuevo.
 
 ## Validación
 
