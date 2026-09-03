@@ -105,6 +105,11 @@ function formatearTamanoArchivo(tamano: number) {
   return `${(tamano / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatearFechaGasto(fecha: string) {
+  const [anio, mes, dia] = fecha.split('-');
+  return anio && mes && dia ? `${dia}/${mes}/${anio}` : 'Sin fecha';
+}
+
 function convertirMonto(valor: string) {
   const valorNormalizado = valor.trim().replace(',', '.');
   if (!/^\d+(?:\.\d+)?$/.test(valorNormalizado)) return null;
@@ -1113,6 +1118,7 @@ export default function Page() {
           <p>
             {formulario.establecimiento || 'Sin establecimiento'} · {formulario.moneda} {formulario.monto || '0'} · {esTarjetaCredito ? `${formulario.cantidad_cuotas} cuota(s)` : 'Pago único'}
           </p>
+          <p>Fecha: {formatearFechaGasto(formulario.fecha_gasto)}</p>
         </div>
         <button disabled={guardando} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white">
           {guardando ? 'Guardando...' : 'Guardar gasto'}
