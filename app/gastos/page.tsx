@@ -191,6 +191,12 @@ export default function Page({ searchParams }: { searchParams: { actualizar?: st
     if (!grupoId) return;
     void cargarDatos();
   }, [grupoId, actualizacionSolicitada]);
+  useEffect(() => {
+    if (!grupoId) return;
+    const actualizarGastos = () => { void cargarDatos(); };
+    window.addEventListener('spendflow:actualizar-gastos', actualizarGastos);
+    return () => window.removeEventListener('spendflow:actualizar-gastos', actualizarGastos);
+  }, [grupoId]);
 
   const nombresCategoria = useMemo(() => new Map(categorias.map((c) => [c.id, c.nombre])), [categorias]);
   const nombresMedioPago = useMemo(() => new Map(mediosPago.map((m) => [m.id, m.nombre])), [mediosPago]);

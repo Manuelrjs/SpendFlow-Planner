@@ -67,6 +67,10 @@ export function NavegacionPrincipal() {
     if (enlace.href !== '/gastos') return;
     if (evento.ctrlKey || evento.metaKey || evento.shiftKey || evento.altKey) return;
     evento.preventDefault();
+    if (pathname === '/gastos') {
+      window.dispatchEvent(new Event('spendflow:actualizar-gastos'));
+      return;
+    }
     router.push(`/gastos?actualizar=${Date.now()}`);
   };
   const nombreGrupo = perfil?.grupo_nombre ?? 'Preparando grupo...'; const email = session?.user.email ?? 'Sesión activa';
