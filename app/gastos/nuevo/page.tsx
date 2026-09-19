@@ -71,7 +71,6 @@ type Formulario = {
 type CampoDetectadoIA = keyof Pick<Formulario, 'monto' | 'moneda' | 'fecha_gasto' | 'establecimiento' | 'categoria_id' | 'medio_pago_id' | 'descripcion' | 'observaciones'>;
 
 const HOY = new Date().toISOString().slice(0, 10);
-const CLAVE_ACTUALIZACION_GASTOS = 'spendflow:gastos-actualizados-en';
 const inicial: Formulario = {
   monto: '',
   moneda: 'ARS',
@@ -692,7 +691,6 @@ export default function Page() {
       } else {
         setMensaje('Gasto registrado con éxito.');
       }
-      sessionStorage.setItem(CLAVE_ACTUALIZACION_GASTOS, Date.now().toString());
       setFormulario({ ...inicial, fecha_gasto: HOY });
       limpiarComprobanteSeleccionado();
     } catch (e) {
