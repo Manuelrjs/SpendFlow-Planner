@@ -8,6 +8,7 @@ const MENSAJE_ERROR_ANALISIS = 'No se pudo analizar el comprobante';
 
 type DatosComprobanteSugeridos = {
   fecha_gasto: string;
+  fecha_incluye_anio: boolean | null;
   establecimiento: string;
   monto: number | null;
   moneda: string;
@@ -25,6 +26,7 @@ type DatosComprobanteSugeridos = {
 
 const RESPUESTA_POR_DEFECTO: DatosComprobanteSugeridos = {
   fecha_gasto: '',
+  fecha_incluye_anio: null,
   establecimiento: '',
   monto: null,
   moneda: 'ARS',
@@ -46,6 +48,7 @@ function limpiarRespuesta(payload: unknown): DatosComprobanteSugeridos {
 
   const data = payload as Record<string, unknown>;
   base.fecha_gasto = typeof data.fecha_gasto === 'string' ? data.fecha_gasto : '';
+  base.fecha_incluye_anio = typeof data.fecha_incluye_anio === 'boolean' ? data.fecha_incluye_anio : null;
   base.establecimiento = typeof data.establecimiento === 'string' ? data.establecimiento : '';
   base.monto = typeof data.monto === 'number' && Number.isFinite(data.monto) ? data.monto : null;
   base.moneda = typeof data.moneda === 'string' && data.moneda.trim() ? data.moneda.trim() : 'ARS';
@@ -76,6 +79,36 @@ function limpiarRespuesta(payload: unknown): DatosComprobanteSugeridos {
   base.receptor_factura = typeof data.receptor_factura === 'string' ? data.receptor_factura : '';
 
   return base;
+}
+
+function obtenerAnioActualArgentina(): number {
+  const parteAnio = new Intl.DateTimeFormat('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+  }).formatToParts(new Date()).find((parte) => parte.type === 'year');
+
+  return Number(parteAnio?.value) || new Date().getUTCFullYear();
+}
+
+function aplicarAnioActualSiNoFueDetectado(sugerencias: DatosComprobanteSugeridos, anioActual: number): DatosComprobanteSugeridos {
+  if (sugerencias.fecha_incluye_anio !== false) return sugerencias;
+
+  const coincidencia = sugerencias.fecha_gasto.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  if (!coincidencia) return sugerencias;
+
+  const mes = Number(coincidencia[1]);
+  const dia = Number(coincidencia[2]);
+  const fechaValidada = new Date(Date.UTC(anioActual, mes - 1, dia));
+  if (
+    fechaValidada.getUTCFullYear() !== anioActual
+    || fechaValidada.getUTCMonth() !== mes - 1
+    || fechaValidada.getUTCDate() !== dia
+  ) return sugerencias;
+
+  return {
+    ...sugerencias,
+    fecha_gasto: `${anioActual}-${coincidencia[1]}-${coincidencia[2]}`,
+  };
 }
 
 function limpiarJsonDeMarkdown(texto: string): string {
@@ -240,11 +273,14 @@ export async function POST(request: Request) {
     const bytes = await archivo.arrayBuffer();
     const base64 = Buffer.from(bytes).toString('base64');
     const dataUrl = `data:${archivo.type};base64,${base64}`;
+    const anioActual = obtenerAnioActualArgentina();
     const prompt = esPdf
       ? `Analizá este comprobante o factura en PDF y devolvé SOLO JSON válido (sin markdown).
+El año actual es ${anioActual}.
 Campos obligatorios:
 {
   "fecha_gasto": "YYYY-MM-DD o vacío",
+  "fecha_incluye_anio": true si el año aparece en el documento, false si solo aparecen día y mes,
   "establecimiento": "texto o vacío",
   "monto": number o null,
   "moneda": "ARS/USD/etc",
@@ -266,6 +302,8 @@ Reglas:
 - Si hay varios importes, elegir el importe final/total.
 - Si no estás seguro en un campo, usar vacío o null y agregar advertencia.
 - Normalizar fecha a YYYY-MM-DD si es posible.
+- Si la fecha muestra día y mes pero no muestra el año, usar ${anioActual} y devolver "fecha_incluye_anio": false. Nunca asumir 2023 ni otro año anterior.
+- Si el año está visible, conservarlo y devolver "fecha_incluye_anio": true.
 - Normalizar moneda a ARS si parece comprobante argentino y no hay otra moneda clara.
 - No inventar datos.
 - Sugerir categoría y medio de pago como texto libre, sin depender de IDs o catálogos locales.
@@ -276,9 +314,11 @@ Reglas:
 - Si detectás nombre comercial y razón social del emisor, preferir nombre comercial si es claro.
 - Si hay dudas entre más de un nombre, devolver opciones en "establecimiento_candidatos".`
       : `Analizá la imagen de un comprobante (ticket/factura) y devolvé SOLO JSON válido (sin markdown).
+El año actual es ${anioActual}.
 Campos obligatorios:
 {
   "fecha_gasto": "YYYY-MM-DD o vacío",
+  "fecha_incluye_anio": true si el año aparece en la imagen, false si solo aparecen día y mes,
   "establecimiento": "texto o vacío",
   "monto": number o null,
   "moneda": "ARS/USD/etc",
@@ -298,6 +338,8 @@ Reglas:
 - Si hay varios importes, elegir el importe final/total.
 - Si no estás seguro en un campo, usar vacío o null y agregar advertencia.
 - Normalizar fecha a YYYY-MM-DD si es posible.
+- Si la fecha muestra día y mes pero no muestra el año, usar ${anioActual} y devolver "fecha_incluye_anio": false. Nunca asumir 2023 ni otro año anterior.
+- Si el año está visible, conservarlo y devolver "fecha_incluye_anio": true.
 - Normalizar moneda a ARS si parece comprobante argentino y no hay otra moneda clara.
 - No inventar datos.
 - Sugerir categoría y medio de pago como texto libre, sin depender de IDs o catálogos locales.
@@ -380,7 +422,7 @@ Reglas:
     }
 
 
-    const sugerencias = limpiarRespuesta(parsed);
+    const sugerencias = aplicarAnioActualSiNoFueDetectado(limpiarRespuesta(parsed), anioActual);
     const textoAnalizado = [
       sugerencias.establecimiento,
       sugerencias.descripcion,
