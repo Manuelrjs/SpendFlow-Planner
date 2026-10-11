@@ -815,19 +815,42 @@ export default function Page() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Cantidad de cuotas *</label>
-              <input
-                type="number"
-                min={1}
-                value={formulario.cantidad_cuotas}
-                onChange={(e) =>
-                  setFormulario((p) => ({
-                    ...p,
-                    cantidad_cuotas: Number(e.target.value) || 1,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border px-3 py-2"
-              />
+              <label htmlFor="cantidad-cuotas" className="text-sm font-medium">Cantidad de cuotas *</label>
+              <div className="mt-1 flex items-stretch gap-2">
+                <button
+                  type="button"
+                  aria-label="Disminuir cantidad de cuotas"
+                  disabled={formulario.cantidad_cuotas <= 1}
+                  onClick={() => setFormulario((p) => ({ ...p, cantidad_cuotas: Math.max(1, p.cantidad_cuotas - 1) }))}
+                  className="min-h-11 min-w-11 rounded-xl border px-3 text-xl font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  −
+                </button>
+                <input
+                  id="cantidad-cuotas"
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={formulario.cantidad_cuotas}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) =>
+                    setFormulario((p) => ({
+                      ...p,
+                      cantidad_cuotas: Math.max(1, Number.parseInt(e.target.value, 10) || 1),
+                    }))
+                  }
+                  className="min-h-11 min-w-0 flex-1 rounded-xl border px-3 py-2 text-center text-base"
+                />
+                <button
+                  type="button"
+                  aria-label="Aumentar cantidad de cuotas"
+                  onClick={() => setFormulario((p) => ({ ...p, cantidad_cuotas: p.cantidad_cuotas + 1 }))}
+                  className="min-h-11 min-w-11 rounded-xl border px-3 text-xl font-semibold"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </>
         )}
