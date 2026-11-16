@@ -55,9 +55,9 @@ export default function RegistroPage() {
       <p className="mt-1 text-sm text-slate-600">Controlá tus gastos y anticipá tus pagos.</p>
       <h2 className="mt-4 text-lg font-medium">Crear cuenta</h2>
       <p className="mt-2 text-sm">{mensaje}</p>
-      <form onSubmit={onSubmit} className="mt-4 space-y-3">
-        <input className="w-full rounded-xl border px-3 py-2.5" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <input className="w-full rounded-xl border px-3 py-2.5" placeholder="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+      <form onSubmit={onSubmit} className="mt-4 space-y-3" autoComplete="on">
+        <input aria-label="Email" className="w-full rounded-xl border px-3 py-2.5" placeholder="Email" type="email" name="username" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input aria-label="Contraseña" className="w-full rounded-xl border px-3 py-2.5" placeholder="Contraseña" type="password" name="new-password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
         <button disabled={loading} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
           {loading ? 'Creando cuenta...' : 'Crear cuenta'}
         </button>
