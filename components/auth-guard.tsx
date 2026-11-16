@@ -17,7 +17,7 @@ import { SelectorGrupoActivo } from '@/components/selector-grupo-activo';
 import { ErrorTecnicoDesarrollo } from '@/components/error-tecnico-desarrollo';
 import { registrarErrorSpendWise, type ErrorTecnico } from '@/lib/errores';
 
-const RUTAS_PUBLICAS = new Set(['/login', '/registro', '/aceptar-invitacion']);
+const RUTAS_PUBLICAS = new Set(['/login', '/registro', '/recuperar-contrasena', '/restablecer-contrasena', '/aceptar-invitacion']);
 const RUTAS_SOLO_SIN_SESION = new Set(['/login', '/registro']);
 const TIEMPO_AVISO_CONEXION_MS = 3000;
 const TIEMPO_MOSTRAR_REINTENTO_MS = 8000;

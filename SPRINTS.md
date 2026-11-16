@@ -32,6 +32,8 @@ Completar QA funcional para confirmar que no haya errores bloqueantes ni fugas v
 - Corregida la recarga manual de Gastos para consultar nuevamente Supabase al pulsar la sección aunque la vista ya esté abierta.
 - Corregido el análisis con IA para usar el año en curso cuando la fecha visible del comprobante solo incluye día y mes.
 - Mejorada la selección de cantidad de cuotas en mobile con controles táctiles y reemplazo directo del valor.
+- Mejorada la vista de gastos en mobile con búsqueda destacada, filtros plegables y movimientos agrupados por fecha.
+- Incorporada la recuperación de contraseña por correo y corregido el autocompletado de credenciales en Safari/iPhone.
 
 ## Validación
 

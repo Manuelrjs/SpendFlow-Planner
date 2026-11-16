@@ -77,11 +77,12 @@ export default function LoginPage() {
         <h2 className="text-xl font-semibold">Gastos, cuotas y compromisos futuros</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">Planificá tus pagos y anticipá tu flujo mensual.</p>
         <p className={`mt-5 rounded-xl border px-3 py-2.5 text-sm ${mensaje.includes('incorrectos') || mensaje.includes('No se pudo') ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-100 bg-emerald-50/70 text-emerald-800'}`}>{mensaje}</p>
-        <form onSubmit={onSubmit} className="mt-5 space-y-4">
-          <label className="block text-sm font-semibold text-slate-700">Email<input className="mt-1.5 w-full rounded-xl border px-3 py-2.5" placeholder="tu@email.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label className="block text-sm font-semibold text-slate-700">Contraseña<input className="mt-1.5 w-full rounded-xl border px-3 py-2.5" placeholder="Tu contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+        <form onSubmit={onSubmit} className="mt-5 space-y-4" autoComplete="on">
+          <label className="block text-sm font-semibold text-slate-700">Email<input className="mt-1.5 w-full rounded-xl border px-3 py-2.5" placeholder="tu@email.com" type="email" name="username" autoComplete="username" inputMode="email" autoCapitalize="none" autoCorrect="off" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+          <label className="block text-sm font-semibold text-slate-700">Contraseña<input className="mt-1.5 w-full rounded-xl border px-3 py-2.5" placeholder="Tu contraseña" type="password" name="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           <button disabled={loading} className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-semibold text-white shadow-sm shadow-emerald-900/20 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">{loading ? 'Ingresando...' : 'Iniciar sesión'}</button>
         </form>
+        <p className="mt-4 text-center text-sm"><Link href="/recuperar-contrasena" className="font-semibold text-emerald-700 hover:text-emerald-800">Olvidé mi contraseña</Link></p>
         <p className="mt-5 text-center text-sm text-slate-500">¿Primera vez? <Link href={`/registro?retorno=${encodeURIComponent(retorno)}`} className="font-semibold text-emerald-700 hover:text-emerald-800">Crear cuenta</Link></p>
       </div>
     </section>

@@ -103,6 +103,33 @@ function formatearImporte(monto: number, moneda: string) {
     return `${moneda || '$'} ${monto.toFixed(2)}`;
   }
 }
+
+function formatearFechaGrupo(fecha: string) {
+  const [anio, mes, dia] = fecha.split('-').map(Number);
+  const fechaLocal = new Date(anio, mes - 1, dia);
+  const hoy = new Date();
+  const hoyLocal = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const ayerLocal = new Date(hoyLocal);
+  ayerLocal.setDate(ayerLocal.getDate() - 1);
+
+  if (fechaLocal.getTime() === hoyLocal.getTime()) return 'Hoy';
+  if (fechaLocal.getTime() === ayerLocal.getTime()) return 'Ayer';
+
+  return new Intl.DateTimeFormat('es-AR', {
+    day: 'numeric',
+    month: 'long',
+    ...(fechaLocal.getFullYear() !== hoyLocal.getFullYear() ? { year: 'numeric' } : {}),
+  }).format(fechaLocal);
+}
+
+function obtenerIniciales(texto: string) {
+  return texto
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((palabra) => palabra[0]?.toUpperCase())
+    .join('') || 'G';
+}
 async function obtenerGrupoIdActual() {
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
@@ -156,6 +183,7 @@ export default function Page({ searchParams }: { searchParams: { actualizar?: st
   const [tarjetasFisicas, setTarjetasFisicas] = useState<TarjetaFisica[]>([]);
   const [calendarios, setCalendarios] = useState<CalendarioTarjeta[]>([]);
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_INICIALES);
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [gastoEditando, setGastoEditando] = useState<Gasto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorTecnico, setErrorTecnico] = useState<ErrorTecnico | null>(null);
@@ -260,6 +288,19 @@ export default function Page({ searchParams }: { searchParams: { actualizar?: st
 
   const totalOperativo = gastosFiltrados.filter((g) => g.estado_registro !== 'anulado').reduce((acc, g) => acc + g.monto, 0);
   const totalAnulado = gastosFiltrados.filter((g) => g.estado_registro === 'anulado').reduce((acc, g) => acc + g.monto, 0);
+  const gastosAgrupados = useMemo(
+    () =>
+      Array.from(
+        gastosFiltrados.reduce((grupos, gasto) => {
+          const lista = grupos.get(gasto.fecha_gasto) ?? [];
+          lista.push(gasto);
+          grupos.set(gasto.fecha_gasto, lista);
+          return grupos;
+        }, new Map<string, Gasto[]>()),
+      ),
+    [gastosFiltrados],
+  );
+  const cantidadFiltrosActivos = Object.entries(filtros).filter(([clave, valor]) => clave !== 'busqueda' && clave !== 'estado_registro' && Boolean(valor)).length + (filtros.estado_registro !== 'activos' ? 1 : 0);
 
   const esMedioTarjetaCredito = (medioId: string) => (nombresMedioPago.get(medioId) ?? '').toLowerCase().includes('tarjeta') && (nombresMedioPago.get(medioId) ?? '').toLowerCase().includes('cr');
   const gastoEditandoEsTarjeta = gastoEditando ? esMedioTarjetaCredito(gastoEditando.medio_pago_id) : false;
@@ -678,92 +719,84 @@ export default function Page({ searchParams }: { searchParams: { actualizar?: st
   return (
     <section className="space-y-4">
       <FeedbackToast tipo={error ? 'error' : mensajeExito ? 'ok' : mensajeComprobante ? 'info' : 'info'} mensaje={error ?? mensajeExito ?? mensajeComprobante} />
-      <h1 className="text-2xl font-semibold">Historial de gastos {filtros.estado_registro === 'anulados' ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-1 text-xs text-rose-700">Vista Anulados</span> : null}</h1>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Actividad</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Gastos</h1>
+          <span className="rounded-full bg-[var(--surface-3)] px-3 py-1 text-xs font-medium text-slate-500">
+            {gastosFiltrados.length} {gastosFiltrados.length === 1 ? 'movimiento' : 'movimientos'}
+          </span>
+        </div>
+      </div>
       {mensajeExito && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{mensajeExito}</p>}
       {error && <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <ErrorTecnicoDesarrollo error={errorTecnico} />
 
-      <div className="sf-card grid grid-cols-1 gap-2 p-3 md:grid-cols-3">
-        <input className="rounded-xl border px-3 py-2" placeholder="Buscar" value={filtros.busqueda} onChange={(e) => setFiltros((p) => ({ ...p, busqueda: e.target.value }))} />
-        <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_desde} onChange={(e) => setFiltros((p) => ({ ...p, fecha_desde: e.target.value }))} />
-        <input type="date" className="rounded-xl border px-3 py-2" value={filtros.fecha_hasta} onChange={(e) => setFiltros((p) => ({ ...p, fecha_hasta: e.target.value }))} />
-        {renderSelect('Categoría', filtros.categoria_id, categorias, (v) => setFiltros((p) => ({ ...p, categoria_id: v })))}
-        {renderSelect(
-          'Persona',
-          filtros.persona_id,
-          personas.map((p) => ({
-            id: p.id,
-            nombre: `${p.nombre} ${p.apellido ?? ''}`.trim(),
-          })),
-          (v) => setFiltros((p) => ({ ...p, persona_id: v })),
-        )}
-        {renderSelect('Medio de pago', filtros.medio_pago_id, mediosPago, (v) => setFiltros((p) => ({ ...p, medio_pago_id: v })))}
-        {renderSelect(
-          'Cuenta de tarjeta',
-          filtros.cuenta_tarjeta_id,
-          cuentasTarjeta.map((c) => ({ id: c.id, nombre: c.nombre_cuenta })),
-          (v) => setFiltros((p) => ({ ...p, cuenta_tarjeta_id: v })),
-        )}
-        {renderSelect(
-          'Tarjeta física',
-          filtros.tarjeta_fisica_id,
-          tarjetasFisicas.map((t) => ({
-            id: t.id,
-            nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta',
-          })),
-          (v) => setFiltros((p) => ({ ...p, tarjeta_fisica_id: v })),
-        )}
-        <select
-          value={filtros.estado_registro}
-          onChange={(e) =>
-            setFiltros((p) => ({
-              ...p,
-              estado_registro: e.target.value as Filtros['estado_registro'],
-            }))
-          }
-          className="rounded-xl border px-3 py-2 text-sm"
-        >
-          <option value="activos">Activos / confirmados</option>
-          <option value="anulados">Anulados</option>
-          <option value="todos">Todos</option>
-        </select>
+      <div className="space-y-3">
+        <label className="sf-card flex min-h-12 items-center gap-3 px-4 py-3 shadow-sm">
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-none stroke-slate-400 stroke-2">
+            <circle cx="11" cy="11" r="7" />
+            <path strokeLinecap="round" d="m20 20-4-4" />
+          </svg>
+          <span className="sr-only">Buscar gastos</span>
+          <input className="min-w-0 flex-1 border-0 bg-transparent p-0 text-base outline-none placeholder:text-slate-400" placeholder="Buscar por comercio, persona o monto" value={filtros.busqueda} onChange={(e) => setFiltros((p) => ({ ...p, busqueda: e.target.value }))} />
+          {filtros.busqueda ? <button type="button" onClick={() => setFiltros((p) => ({ ...p, busqueda: '' }))} className="rounded-full px-2 py-1 text-sm text-slate-400" aria-label="Limpiar búsqueda">×</button> : null}
+        </label>
+
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <button type="button" aria-expanded={mostrarFiltros} onClick={() => setMostrarFiltros((actual) => !actual)} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition ${mostrarFiltros || cantidadFiltrosActivos ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current stroke-2" strokeLinecap="round"><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+            Filtros {cantidadFiltrosActivos ? `(${cantidadFiltrosActivos})` : ''}
+          </button>
+          {(['activos', 'anulados', 'todos'] as const).map((estado) => (
+            <button key={estado} type="button" onClick={() => setFiltros((p) => ({ ...p, estado_registro: estado }))} className={`min-h-10 shrink-0 rounded-xl border px-3 text-sm font-medium transition ${filtros.estado_registro === estado ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+              {estado === 'activos' ? 'Confirmados' : estado === 'anulados' ? 'Anulados' : 'Todos'}
+            </button>
+          ))}
+        </div>
+
+        {mostrarFiltros ? (
+          <div className="sf-card grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="block text-sm font-medium">Desde<input aria-label="Fecha desde" type="date" className="mt-1 w-full rounded-xl border px-3 py-2" value={filtros.fecha_desde} onChange={(e) => setFiltros((p) => ({ ...p, fecha_desde: e.target.value }))} /></label>
+            <label className="block text-sm font-medium">Hasta<input aria-label="Fecha hasta" type="date" className="mt-1 w-full rounded-xl border px-3 py-2" value={filtros.fecha_hasta} onChange={(e) => setFiltros((p) => ({ ...p, fecha_hasta: e.target.value }))} /></label>
+            {renderSelect('Categoría', filtros.categoria_id, categorias, (v) => setFiltros((p) => ({ ...p, categoria_id: v })))}
+            {renderSelect('Persona', filtros.persona_id, personas.map((p) => ({ id: p.id, nombre: `${p.nombre} ${p.apellido ?? ''}`.trim() })), (v) => setFiltros((p) => ({ ...p, persona_id: v })))}
+            {renderSelect('Medio de pago', filtros.medio_pago_id, mediosPago, (v) => setFiltros((p) => ({ ...p, medio_pago_id: v })))}
+            {renderSelect('Cuenta de tarjeta', filtros.cuenta_tarjeta_id, cuentasTarjeta.map((c) => ({ id: c.id, nombre: c.nombre_cuenta })), (v) => setFiltros((p) => ({ ...p, cuenta_tarjeta_id: v })))}
+            {renderSelect('Tarjeta física', filtros.tarjeta_fisica_id, tarjetasFisicas.map((t) => ({ id: t.id, nombre: tarjetasEtiquetas.get(t.id) ?? 'Tarjeta' })), (v) => setFiltros((p) => ({ ...p, tarjeta_fisica_id: v })))}
+            <button type="button" onClick={() => setFiltros((p) => ({ ...FILTROS_INICIALES, busqueda: p.busqueda }))} className="min-h-11 self-end rounded-xl border border-[var(--border)] px-3 text-sm font-semibold">Limpiar filtros</button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-        <div className="sf-card p-3 text-sm">
-          Gastos encontrados: <strong>{gastosFiltrados.length}</strong>
-        </div>
-        <div className="sf-card p-3 text-sm">
-          Total operativo: <strong>${totalOperativo.toFixed(2)}</strong>
-        </div>
-        <div className="sf-card p-3 text-sm">
-          Total anulado: <strong>${totalAnulado.toFixed(2)}</strong>
-        </div>
+      <div className="sf-card flex items-center justify-between gap-4 p-4">
+        <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Total visible</p><p className="mt-1 text-xl font-bold tabular-nums">{formatearImporte(totalOperativo, 'ARS')}</p></div>
+        {totalAnulado > 0 ? <div className="text-right"><p className="text-xs text-slate-500">Anulado</p><p className="font-semibold tabular-nums text-rose-500">{formatearImporte(totalAnulado, 'ARS')}</p></div> : null}
       </div>
 
-      <div className="sf-card overflow-x-auto">
-        <table className="sf-responsive-table min-w-full text-sm">
-          <tbody>
-            {gastosFiltrados.map((gasto) => {
+      <div className="space-y-6">
+        {gastosAgrupados.map(([fecha, gastosDelDia]) => (
+          <section key={fecha} aria-labelledby={`fecha-${fecha}`}>
+            <div className="mb-2 flex items-center justify-between px-1">
+              <h2 id={`fecha-${fecha}`} className="text-sm font-bold capitalize">{formatearFechaGrupo(fecha)}</h2>
+              <span className="text-xs text-slate-500">{gastosDelDia.length} {gastosDelDia.length === 1 ? 'gasto' : 'gastos'}</span>
+            </div>
+            <div className="sf-card divide-y divide-[var(--border)] overflow-hidden">
+            {gastosDelDia.map((gasto) => {
               const cuotasDelGasto = cuotasPorGasto.get(gasto.id) ?? [];
               const resumenCuotas = cuotasDelGasto.length > 0 ? (cuotasDelGasto.length === 1 ? etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas) : `${etiquetaCuota(cuotasDelGasto[0].numero_cuota, cuotasDelGasto[0].total_cuotas)} · +${cuotasDelGasto.length - 1}`) : esMedioTarjetaCredito(gasto.medio_pago_id) ? 'Tarjeta sin compromiso' : String(gasto.cantidad_cuotas);
+              const titulo = gasto.descripcion?.trim() || gasto.establecimiento;
+              const subtituloPago = [nombresMedioPago.get(gasto.medio_pago_id), gasto.cuenta_tarjeta_id ? nombresCuenta.get(gasto.cuenta_tarjeta_id) : null].filter(Boolean).join(' · ');
               return (
-                <tr key={gasto.id} className={`border-t ${gasto.estado_registro === 'anulado' ? 'text-slate-400' : ''}`}>
-                  <td className="px-2 py-2">{gasto.fecha_gasto}</td>
-                  <td className="px-2">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-[var(--text-primary)]">{gasto.descripcion?.trim() || gasto.establecimiento}</p>
-                        {gasto.descripcion?.trim() ? <p className="truncate text-xs text-slate-500">{gasto.establecimiento}</p> : null}
-                      </div>
-                      <p className="shrink-0 text-right text-base font-bold tabular-nums text-[var(--text-primary)]">{formatearImporte(gasto.monto, gasto.moneda)}</p>
+                <article key={gasto.id} className={`flex gap-3 p-4 ${gasto.estado_registro === 'anulado' ? 'opacity-55' : ''}`}>
+                  <div aria-hidden="true" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-xs font-bold text-emerald-600">{obtenerIniciales(titulo)}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0"><p className="truncate font-semibold text-[var(--text-primary)]">{titulo}</p><p className="truncate text-sm text-slate-500">{gasto.descripcion?.trim() ? gasto.establecimiento : nombresCategoria.get(gasto.categoria_id)}</p></div>
+                      <div className="shrink-0 text-right"><p className="font-bold tabular-nums text-[var(--text-primary)]">− {formatearImporte(gasto.monto, gasto.moneda)}</p><p className="mt-0.5 text-xs text-slate-500">{nombresPersona.get(gasto.persona_id)}</p></div>
                     </div>
-                  </td>
-                  <td className="px-2">{nombresCategoria.get(gasto.categoria_id)}</td>
-                  <td className="px-2">{nombresPersona.get(gasto.persona_id)}</td>
-                  <td className="px-2">{nombresMedioPago.get(gasto.medio_pago_id)}</td>
-                  <td className="px-2">{resumenCuotas}</td>
-                  <td className="px-2">
+                    <p className="mt-1 truncate text-sm text-slate-500">{subtituloPago || 'Medio de pago no informado'}{resumenCuotas && resumenCuotas !== '1' ? ` · ${resumenCuotas}` : ''}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
                     {(comprobantesPorGasto.get(gasto.id) ?? 0) > 0 ? (
                       <button
                         type="button"
@@ -772,30 +805,31 @@ export default function Page({ searchParams }: { searchParams: { actualizar?: st
                           setIndicePreview(0);
                           setComprobantePreviewAbierto(true);
                         }}
-                        className="cursor-pointer rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-700 transition hover:bg-emerald-200"
+                        className="cursor-pointer rounded-lg bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 transition hover:bg-emerald-500/20"
                       >
                         {etiquetaComprobanteGasto(gasto.id)}
                       </button>
                     ) : (
-                      <span className="rounded bg-[var(--surface-3)] px-2 py-1 text-xs text-slate-600">Sin comprobante</span>
+                      <span className="rounded-lg bg-[var(--surface-3)] px-2 py-1 text-xs text-slate-500">Sin comprobante</span>
                     )}
-                  </td>
-                  <td className="px-2">{gasto.estado_registro === 'anulado' ? <span className="rounded bg-rose-100 px-2 py-1 text-xs text-rose-700">Anulado</span> : null}</td>
-                  <td className="px-2">
-                    <button onClick={() => setGastoEditando(gasto)} className="rounded border px-2 py-1">
+                    {gasto.estado_registro === 'anulado' ? <span className="rounded-lg bg-rose-500/10 px-2 py-1 text-xs font-medium text-rose-600">Anulado</span> : null}
+                    <button onClick={() => setGastoEditando(gasto)} className="ml-auto rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-medium">
                       Editar
                     </button>
                     {gasto.estado_registro !== 'anulado' ? (
-                      <button onClick={() => void anularGasto(gasto)} className="ml-2 rounded border border-rose-200 px-2 py-1 text-rose-700">
+                      <button onClick={() => void anularGasto(gasto)} className="rounded-lg border border-rose-300/50 px-2.5 py-1 text-xs font-medium text-rose-600">
                         Anular
                       </button>
                     ) : null}
-                  </td>
-                </tr>
+                    </div>
+                  </div>
+                </article>
               );
             })}
-          </tbody>
-        </table>
+            </div>
+          </section>
+        ))}
+        {gastosAgrupados.length === 0 ? <div className="sf-card px-5 py-10 text-center"><p className="font-semibold">No encontramos gastos</p><p className="mt-1 text-sm text-slate-500">Probá cambiar la búsqueda o limpiar los filtros.</p></div> : null}
       </div>
 
       {comprobantePreviewAbierto ? (
